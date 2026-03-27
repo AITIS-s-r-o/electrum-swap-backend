@@ -2037,6 +2037,10 @@ class Commands(Logger):
                 "max_reverse_sat": offer.pairs.max_reverse,
                 "min_amount_sat": offer.pairs.min_amount,
                 "prepayment": 2 * offer.pairs.mining_fee,
+                "mining_fee": offer.pairs.mining_fee,
+                "timestamp": offer.timestamp,
+                "server_pubkey": offer.server_pubkey,
+                "pow_bits": offer.pow_bits,
             }
         return result
 
