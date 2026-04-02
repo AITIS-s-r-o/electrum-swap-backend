@@ -2145,9 +2145,9 @@ class Commands(Logger):
         arg:decimal:onchain_amount:Amount to be received, in satoshis.
         arg:decimal:prepayment:Lightning payment required by the swap provider in order to cover their mining fees. This is included in lightning_amount. However, this part of
             the operation is not trustless; the provider is trusted to fail this payment if the swap fails.
-        arg:string:hash:Hash of the preimage that will be used for the swap.
-        arg:string:claim_pk:Public key that will be used in the onchain claim transaction for the swap.
-        arg:string:provider_pk:Public key of the swap provider, used to identify it and its fee policy.
+        arg:str:hash:Hash of the preimage that will be used for the swap.
+        arg:str:claim_pk:Public key that will be used in the onchain claim transaction for the swap.
+        arg:str:provider_pk:Public key of the swap provider, used to identify it and its fee policy.
         """
         sm = wallet.lnworker.swap_manager
         async with sm.create_transport() as transport:
