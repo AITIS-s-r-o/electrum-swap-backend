@@ -2158,7 +2158,7 @@ class Commands(Logger):
 
             claim_fee = sm.get_fee_for_txbatcher()
             onchain_amount_sat = onchain_amount + claim_fee
-            swapData = await wallet.lnworker.swap_manager.wex_reverse_swap(
+            swapData, invoice, fee_invoice = await wallet.lnworker.swap_manager.wex_reverse_swap(
                 transport=transport,
                 lightning_amount_sat=lightning_amount,
                 expected_onchain_amount_sat=onchain_amount_sat,
@@ -2179,6 +2179,8 @@ class Commands(Logger):
                 'address': swapData.claim_to_output.address,
                 'amount': swapData.claim_to_output.value,
             },
+            'invoice': invoice,
+            'fee_invoice': fee_invoice,
         }
 
     @command('n')

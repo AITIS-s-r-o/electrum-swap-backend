@@ -1362,7 +1362,7 @@ class SwapManager(Logger):
             onchain_amount_sat=onchain_amount,
             lightning_amount_sat=lightning_amount_sat,
             claim_to_output=claim_to_output,
-        )
+        ), invoice, fee_invoice
         return swap
 
     def _add_or_reindex_swap(self, swap: SwapData, *, is_new: bool) -> None:
