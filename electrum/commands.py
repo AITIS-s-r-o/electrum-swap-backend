@@ -2147,7 +2147,7 @@ class Commands(Logger):
             the operation is not trustless; the provider is trusted to fail this payment if the swap fails.
         arg:str:hash:Hash of the preimage that will be used for the swap.
         arg:str:claim_pk:Public key that will be used in the onchain claim transaction for the swap.
-        arg:str:provider_pk:Public key of the swap provider, used to identify it and its fee policy.
+        arg:str:provider_pk:Public key of the swap provider.
         """
         sm = wallet.lnworker.swap_manager
         async with sm.create_transport() as transport:
