@@ -2134,6 +2134,57 @@ class Commands(Logger):
             'prepayment': format_satoshis(prepayment_sat)
         }
 
+    # This is a copy of reverse_swap method above with modifications for WEX. Specifically, we do not generate secrets in Electrum code. We pass the preimage hash in an argument
+    # as well as the claim public key. The swap provider selection is also added as an argument from the caller.
+    @command('wnpl')
+    async def wex_reverse_swap(
+        self, lightning_amount, onchain_amount, prepayment, hash, claim_pk, provider_pk, wallet: Abstract_Wallet = None,
+    ):
+        """
+        Reverse submarine swap: send on Lightning, receive on-chain
+
+        arg:decimal:lightning_amount:Amount to be sent, in satoshis.
+        arg:decimal:onchain_amount:Amount to be received, in satoshis.
+        arg:decimal:prepayment:Lightning payment required by the swap provider in order to cover their mining fees. This is included in lightning_amount. However, this part of
+            the operation is not trustless; the provider is trusted to fail this payment if the swap fails.
+        arg:str:hash:Hash of the preimage that will be used for the swap.
+        arg:str:claim_pk:Public key that will be used in the onchain claim transaction for the swap.
+        arg:str:provider_pk:Public key of the swap provider.
+        """
+        sm = wallet.lnworker.swap_manager
+        async with sm.create_transport() as transport:
+            try:
+                await asyncio.wait_for(sm.is_initialized.wait(), timeout=15)
+            except asyncio.TimeoutError:
+                raise TimeoutError("Could not find configured swap provider. Set up another one. See 'get_submarine_swap_providers'")
+
+            claim_fee = sm.get_fee_for_txbatcher()
+            onchain_amount_sat = onchain_amount + claim_fee
+            swapData, invoice, fee_invoice = await wallet.lnworker.swap_manager.wex_reverse_swap(
+                transport=transport,
+                lightning_amount_sat=lightning_amount,
+                expected_onchain_amount_sat=onchain_amount_sat,
+                prepayment_sat=prepayment,
+                provider_pk=provider_pk,
+                hash=hash,
+                claim_pk=claim_pk,
+            )
+        return {
+            'is_reverse': swapData.is_reverse,
+            'locktime': swapData.locktime,
+            'onchain_amount': swapData.onchain_amount,
+            'lightning_amount': swapData.lightning_amount,
+            'redeem_script': swapData.redeem_script.hex(),
+            'prepay_hash': swapData.prepay_hash.hex(),
+            'lockup_address': swapData.lockup_address,
+            'claim_to_output': {
+                'address': swapData.claim_to_output.address,
+                'amount': swapData.claim_to_output.value,
+            },
+            'invoice': invoice,
+            'fee_invoice': fee_invoice,
+        }
+
     @command('n')
     async def convert_currency(self, from_amount=1, from_ccy='', to_ccy=''):
         """
