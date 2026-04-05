@@ -2154,7 +2154,7 @@ class Commands(Logger):
             try:
                 await asyncio.wait_for(sm.is_initialized.wait(), timeout=15)
             except asyncio.TimeoutError:
-                raise TimeoutError("Could not find configured swap provider. Setup another one. See 'get_submarine_swap_providers'")
+                raise TimeoutError("Could not find configured swap provider. Set up another one. See 'get_submarine_swap_providers'")
 
             claim_fee = sm.get_fee_for_txbatcher()
             onchain_amount_sat = onchain_amount + claim_fee
