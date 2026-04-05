@@ -827,6 +827,7 @@ class SwapManager(Logger):
         self.add_lnwatcher_callback(swap)
         return swap
 
+    # This is a copy of add_reverse_swap method above with modifications for WEX.
     def wex_add_reverse_swap(
         self,
         *,
@@ -1217,6 +1218,7 @@ class SwapManager(Logger):
         await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         return swap.funding_txid
 
+    # This is a copy of reverse_swap method above with modifications for WEX.
     async def wex_reverse_swap(
             self,
             *,
@@ -1231,6 +1233,10 @@ class SwapManager(Logger):
             claim_to_output: Optional[TxOutput] = None,
     ) -> Optional[SwapData]:
         """send on Lightning, receive on-chain
+
+        arg:provider_pk:str:Selected swap provider's public key in hex.
+        arg:hash:str:Hash of the preimage in hex.
+        arg:claim_pk:str:Public key in hex that the server should use in the redeem script to allow the user to claim the on-chain output.
 
         - User generates preimage, RHASH. Sends RHASH to server.  (RPC 'createswap')
         - Server creates an LN invoice for RHASH.
@@ -1768,6 +1774,7 @@ class SwapServerTransport(Logger):
         """Might raise SwapServerError."""
         pass
 
+    # This is a copy of send_request_to_server method above with modifications for WEX.
     async def wex_send_request_to_server(self, provider_pk: str, method: str, request_data: Optional[dict]) -> dict:
         """Might raise SwapServerError."""
         pass
@@ -2026,6 +2033,7 @@ class NostrTransport(SwapServerTransport):
             raise SwapServerError()
         return response
 
+    # This is a copy of send_request_to_server method above with modifications for WEX.
     @log_exceptions
     async def wex_send_request_to_server(self, provider_pk: str, method: str, request_data: dict) -> dict:
         self.logger.debug(f"wex swapserver req: npub: {provider_pk}, method: {method} relays: {self.relays}")
