@@ -2031,6 +2031,8 @@ class NostrTransport(SwapServerTransport):
         self.logger.debug(f"wex swapserver req: npub: {provider_pk}, method: {method} relays: {self.relays}")
         request_data['method'] = method
         server_pubkey = provider_pk
+
+        # Send direct message to the swap provider using Nostr.
         event_id = await self.send_direct_message(server_pubkey, json.dumps(request_data), retries=1)
         if not event_id:
             raise SwapServerError()
