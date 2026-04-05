@@ -2134,6 +2134,8 @@ class Commands(Logger):
             'prepayment': format_satoshis(prepayment_sat)
         }
 
+    # This is a copy of reverse_swap method above with modifications for WEX. Specifically, we do not generate secrets in Electrum code. We pass the preimage hash in an argument
+    # as well as the claim public key. The swap provider selection is also added as an argument from the caller.
     @command('wnpl')
     async def wex_reverse_swap(
         self, lightning_amount, onchain_amount, prepayment, hash, claim_pk, provider_pk, wallet: Abstract_Wallet = None,
