@@ -2038,7 +2038,7 @@ class NostrTransport(SwapServerTransport):
         response = await fut
         assert isinstance(response, dict)
         if 'error' in response:
-            self.logger.warning(f"error from swap server [DO NOT TRUST THIS MESSAGE]: {response['error']}")
+            self.logger.warning(f"error from swap server {provider_pk} [DO NOT TRUST THIS MESSAGE]: {response['error']}")
             raise SwapServerError()
         return response
 
