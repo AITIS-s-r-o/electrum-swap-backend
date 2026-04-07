@@ -2201,7 +2201,7 @@ class Commands(Logger):
             'prepay_hash': swapData.prepay_hash.hex(),
             'lockup_address': swapData.lockup_address,
             'claim_to_output': {
-                'address': swapData.claim_to_output.address,
+                'address': swapData.claim_to_output.address(),
                 'amount': swapData.claim_to_output.value,
             },
             'invoice': invoice,
