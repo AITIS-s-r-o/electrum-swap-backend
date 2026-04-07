@@ -861,7 +861,7 @@ class SwapManager(Logger):
             redeem_script=redeem_script,
             locktime=locktime,
             privkey=[],
-            preimage=[],
+            preimage="",
             prepay_hash=prepay_hash,
             lockup_address=lockup_address,
             onchain_amount=onchain_amount_sat,
