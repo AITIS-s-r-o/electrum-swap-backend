@@ -2145,7 +2145,9 @@ class Commands(Logger):
 
     # This is a copy of reverse_swap method above with modifications for WEX. Specifically, we do not generate secrets in Electrum code. We pass the preimage hash in an argument
     # as well as the claim public key. The swap provider selection is also added as an argument from the caller.
-    @command('wnpl')
+    #
+    # "p" is missing in @command definition as the command does not require a password.
+    @command('wnl')
     async def wex_reverse_swap(
         self, lightning_amount, onchain_amount, prepayment, hash, claim_pk, provider_pk, wallet: Abstract_Wallet = None,
     ):
@@ -2160,15 +2162,25 @@ class Commands(Logger):
         arg:str:claim_pk:Public key that will be used in the onchain claim transaction for the swap.
         arg:str:provider_pk:Public key of the swap provider.
         """
+
+        self.logger.info(f"wex_reverse_swap; lightning_amount={lightning_amount}, onchain_amount={onchain_amount}, prepayment={prepayment}, hash={hash}, claim_pk={claim_pk}, provider_pk={provider_pk}")
+
         sm = wallet.lnworker.swap_manager
-        async with sm.create_transport() as transport:
+        self.logger.info(f"wex_reverse_swap; About to create_transport.")
+        async with sm.wex_create_transport(provider_pk) as transport:
+            self.logger.info(f"wex_reverse_swap; Wait for 'is_initialized'.")
             try:
                 await asyncio.wait_for(sm.is_initialized.wait(), timeout=15)
             except asyncio.TimeoutError:
                 raise TimeoutError("Could not find configured swap provider. Set up another one. See 'get_submarine_swap_providers'")
 
+            self.logger.info(f"wex_reverse_swap; About to get reverse swap data.")
             claim_fee = sm.get_fee_for_txbatcher()
+            self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}'")
+
             onchain_amount_sat = onchain_amount + claim_fee
+            self.logger.info(f"wex_reverse_swap; onchain_amount_sat='{onchain_amount_sat}'")
+
             swapData, invoice, fee_invoice = await wallet.lnworker.swap_manager.wex_reverse_swap(
                 transport=transport,
                 lightning_amount_sat=lightning_amount,
@@ -2178,6 +2190,8 @@ class Commands(Logger):
                 hash=hash,
                 claim_pk=claim_pk,
             )
+
+            self.logger.info(f"wex_reverse_swap; swapData='{swapData}', invoice='{invoice}', fee_invoice='{fee_invoice}'")
         return {
             'is_reverse': swapData.is_reverse,
             'locktime': swapData.locktime,

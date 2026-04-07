@@ -11,6 +11,7 @@ Electrum.egg-info/
 packages
 env/
 /.venv*/
+/venv
 .buildozer
 .buildozer_*/
 bin/
