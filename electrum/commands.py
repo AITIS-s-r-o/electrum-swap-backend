@@ -2166,7 +2166,7 @@ class Commands(Logger):
         self.logger.info(f"wex_reverse_swap; lightning_amount={lightning_amount}, onchain_amount={onchain_amount}, prepayment={prepayment}, hash={hash}, claim_pk={claim_pk}, provider_pk={provider_pk}")
 
         sm = wallet.lnworker.swap_manager
-        async with sm.create_transport() as transport:
+        async with sm.wex_create_transport(provider_pk) as transport:
             try:
                 await asyncio.wait_for(sm.is_initialized.wait(), timeout=15)
             except asyncio.TimeoutError:
