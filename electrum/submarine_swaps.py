@@ -860,7 +860,7 @@ class SwapManager(Logger):
         swap = SwapData(
             redeem_script=redeem_script,
             locktime=locktime,
-            privkey=[],
+            privkey="",
             preimage="",
             prepay_hash=prepay_hash,
             lockup_address=lockup_address,
