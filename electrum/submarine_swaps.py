@@ -347,8 +347,12 @@ class SwapManager(Logger):
     # This is a copy of create_transport method above with modifications for WEX. Specifically, it forces the use of NostrTransport and sets the server pubkey in the config from 
     # the parameter.
     def wex_create_transport(self, provider_pk) -> 'SwapServerTransport':
+        """
+        arg:str:provider_pk:Public key of the swap provider.
+        """
         from .lnutil import generate_random_keypair
-        self.config.SWAPSERVER_NPUB = to_nip19('npub', self.server_pubkey)
+        self.config.SWAPSERVER_NPUB = to_nip19('npub', provider_pk)
+        self.logger.debug(f"Using npub {self.config.SWAPSERVER_NPUB}.")
         keypair = self.lnworker.nostr_keypair if self.is_server else generate_random_keypair()
         return NostrTransport(self.config, self, keypair)
 
