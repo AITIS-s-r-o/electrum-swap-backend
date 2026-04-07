@@ -2145,7 +2145,9 @@ class Commands(Logger):
 
     # This is a copy of reverse_swap method above with modifications for WEX. Specifically, we do not generate secrets in Electrum code. We pass the preimage hash in an argument
     # as well as the claim public key. The swap provider selection is also added as an argument from the caller.
-    @command('wnpl')
+    #
+    # "p" is missing in @command definition as the command does not require a password.
+    @command('wnl')
     async def wex_reverse_swap(
         self, lightning_amount, onchain_amount, prepayment, hash, claim_pk, provider_pk, wallet: Abstract_Wallet = None,
     ):
@@ -2160,6 +2162,9 @@ class Commands(Logger):
         arg:str:claim_pk:Public key that will be used in the onchain claim transaction for the swap.
         arg:str:provider_pk:Public key of the swap provider.
         """
+
+        self.logger.info(f"wex_reverse_swap; lightning_amount={lightning_amount}, onchain_amount={onchain_amount}, prepayment={prepayment}, hash={hash}, claim_pk={claim_pk}, provider_pk={provider_pk}")
+
         sm = wallet.lnworker.swap_manager
         async with sm.create_transport() as transport:
             try:
