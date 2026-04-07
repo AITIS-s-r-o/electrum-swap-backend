@@ -1244,7 +1244,7 @@ class SwapManager(Logger):
             channels: Optional[Sequence['Channel']] = None,
             claim_to_output: Optional[TxOutput] = None,
     ) -> Optional[SwapData]:
-        """send on Lightning, receive on-chain
+        """Send on Lightning, receive on-chain.
 
         arg:provider_pk:str:Selected swap provider's public key in hex.
         arg:hash:str:Hash of the preimage in hex.
