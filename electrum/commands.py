@@ -2166,6 +2166,8 @@ class Commands(Logger):
         self.logger.info(f"wex_reverse_swap; lightning_amount={lightning_amount}, onchain_amount={onchain_amount}, prepayment={prepayment}, hash={hash}, claim_pk={claim_pk}, provider_pk={provider_pk}")
 
         sm = wallet.lnworker.swap_manager
+
+        self.logger.info(f"wex_reverse_swap; About to create_transport.")
         async with sm.create_transport() as transport:
             self.logger.info(f"wex_reverse_swap; Wait for 'is_initialized'.")
             try:
