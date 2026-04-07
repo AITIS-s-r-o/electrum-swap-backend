@@ -2167,13 +2167,19 @@ class Commands(Logger):
 
         sm = wallet.lnworker.swap_manager
         async with sm.create_transport() as transport:
+            self.logger.info(f"wex_reverse_swap; Wait for 'is_initialized'.")
             try:
                 await asyncio.wait_for(sm.is_initialized.wait(), timeout=15)
             except asyncio.TimeoutError:
                 raise TimeoutError("Could not find configured swap provider. Set up another one. See 'get_submarine_swap_providers'")
 
+            self.logger.info(f"wex_reverse_swap; About to get reverse swap data.")
             claim_fee = sm.get_fee_for_txbatcher()
+            self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}'")
+
             onchain_amount_sat = onchain_amount + claim_fee
+            self.logger.info(f"wex_reverse_swap; onchain_amount_sat='{onchain_amount_sat}'")
+
             swapData, invoice, fee_invoice = await wallet.lnworker.swap_manager.wex_reverse_swap(
                 transport=transport,
                 lightning_amount_sat=lightning_amount,
@@ -2183,6 +2189,8 @@ class Commands(Logger):
                 hash=hash,
                 claim_pk=claim_pk,
             )
+
+            self.logger.info(f"wex_reverse_swap; swapData='{swapData}', invoice='{invoice}', fee_invoice='{fee_invoice}'")
         return {
             'is_reverse': swapData.is_reverse,
             'locktime': swapData.locktime,
