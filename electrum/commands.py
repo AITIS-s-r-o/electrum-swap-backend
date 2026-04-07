@@ -2203,7 +2203,7 @@ class Commands(Logger):
             'claim_to_output': {
                 'address': swapData.claim_to_output.address(),
                 'amount': swapData.claim_to_output.value,
-            },
+            } if swapData.claim_to_output else None,
             'invoice': invoice,
             'fee_invoice': fee_invoice,
         }
