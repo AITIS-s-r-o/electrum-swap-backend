@@ -357,7 +357,7 @@ class SwapManager(Logger):
         config_copy = copy.copy(self.config)
         config_copy.SWAPSERVER_NPUB = to_nip19('npub', provider_pk)
 
-        self.logger.debug(f"Using npub {self.config.SWAPSERVER_NPUB}.")
+        self.logger.debug(f"Using npub {config_copy.config.SWAPSERVER_NPUB}.")
         keypair = self.lnworker.nostr_keypair if self.is_server else generate_random_keypair()
         return NostrTransport(config_copy, self, keypair)
 
