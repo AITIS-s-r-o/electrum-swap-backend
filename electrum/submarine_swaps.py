@@ -353,7 +353,7 @@ class SwapManager(Logger):
         """
         from .lnutil import generate_random_keypair
 
-         # Create a shallow copy of the config and set SWAPSERVER_NPUB only in the copy.
+        # WEX Create a shallow copy of the config and set SWAPSERVER_NPUB only in the copy.
         config_copy = copy.copy(self.config)
         config_copy.SWAPSERVER_NPUB = to_nip19('npub', provider_pk)
 
