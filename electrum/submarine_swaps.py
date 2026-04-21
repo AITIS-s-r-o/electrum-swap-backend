@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import os
 import ssl
@@ -351,10 +352,14 @@ class SwapManager(Logger):
         arg:str:provider_pk:Public key of the swap provider.
         """
         from .lnutil import generate_random_keypair
-        self.config.SWAPSERVER_NPUB = to_nip19('npub', provider_pk)
-        self.logger.debug(f"Using npub {self.config.SWAPSERVER_NPUB}.")
+
+        # Create a shallow copy of the config and set SWAPSERVER_NPUB only in the copy.
+        config_copy = copy.copy(self.config)
+        config_copy.SWAPSERVER_NPUB = to_nip19('npub', provider_pk)
+
+        self.logger.debug(f"Using npub {config_copy.SWAPSERVER_NPUB}.")
         keypair = self.lnworker.nostr_keypair if self.is_server else generate_random_keypair()
-        return NostrTransport(self.config, self, keypair)
+        return NostrTransport(config_copy, self, keypair)
 
     async def set_nostr_proof_of_work(self) -> None:
         current_pow = get_nostr_ann_pow_amount(
