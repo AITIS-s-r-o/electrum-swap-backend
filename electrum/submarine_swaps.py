@@ -642,9 +642,10 @@ class SwapManager(Logger):
         key = payment_hash.hex()
         if swap := self._swaps.get(key):
             if not swap.is_funded():
-                output = self.create_funding_output(swap)
-                self.wallet.txbatcher.add_payment_output('swaps', output)
-                swap._payment_pending = True
+                self.logger.info(f'faulty swap provider does not create funding transaction')
+                #output = self.create_funding_output(swap)
+                #self.wallet.txbatcher.add_payment_output('swaps', output)
+                #swap._payment_pending = True
         else:
             self.logger.info(f'key not in swaps {key}')
 
