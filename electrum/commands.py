@@ -2033,13 +2033,20 @@ class Commands(Logger):
 
         arg:int:query_time:Optional timeout how long the relays should be queried for provider announcements. Default: 15 sec
         """
+
+        self.logger.debug("Commands.get_submarine_swap_providers *")
+
         sm = wallet.lnworker.swap_manager
         async with sm.create_transport() as transport:
             assert isinstance(transport, NostrTransport)
+            self.logger.debug(f"Commands.get_submarine_swap_providers: Wait {query_time} seconds")
             await asyncio.sleep(query_time)
+
+            self.logger.debug("Commands.get_submarine_swap_providers: Collect offers")
             offers = transport.get_recent_offers()
         result = {}
         for offer in offers:
+            self.logger.debug(f"Commands.get_submarine_swap_providers: Adding offer {offer}")
             result[offer.server_npub] = {
                 "percentage_fee": float(offer.pairs.percentage),
                 "max_forward_sat": offer.pairs.max_forward,
@@ -2051,6 +2058,8 @@ class Commands(Logger):
                 "server_pubkey": offer.server_pubkey,
                 "pow_bits": offer.pow_bits,
             }
+
+        self.logger.debug(f"Commands.get_submarine_swap_providers $ {result=}")
         return result
 
     @command('wnpl')
