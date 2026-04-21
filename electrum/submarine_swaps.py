@@ -1874,6 +1874,7 @@ class NostrTransport(SwapServerTransport):
     LIQUIDITY_UPDATE_INTERVAL_SEC = 30
 
     def __init__(self, config, sm, keypair: Keypair):
+        Logger.__init__(self)
         self.logger.debug(f'NostrTransport: * keypair.pubkey={keypair.pubkey.hex()}')
         SwapServerTransport.__init__(self, config=config, sm=sm)
         self._offers = {}  # type: Dict[str, SwapOffer]
