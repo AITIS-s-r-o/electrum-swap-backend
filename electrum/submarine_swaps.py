@@ -1890,19 +1890,35 @@ class NostrTransport(SwapServerTransport):
         self.logger.debug(f'NostrTransport: $')
 
     def __enter__(self):
+        self.logger.debug(f'NostrTransport.__enter__ *')
+
         asyncio.run_coroutine_threadsafe(self.main_loop(), self.network.asyncio_loop)
+
+        self.logger.debug(f'NostrTransport.__enter__ $')
         return self
 
     def __exit__(self, ex_type, ex, tb):
+        self.logger.debug(f'NostrTransport.__exit__ *')
+
         fut = asyncio.run_coroutine_threadsafe(self.stop(), self.network.asyncio_loop)
         fut.result(timeout=5)
 
+        self.logger.debug(f'NostrTransport.__exit__ $')
+
     async def __aenter__(self):
+        self.logger.debug(f'NostrTransport.__aenter__ *')
+
         asyncio.create_task(self.main_loop())
+
+        self.logger.debug(f'NostrTransport.__aenter__ $')
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.logger.debug(f'NostrTransport.__aexit__ *')
+
         await wait_for2(self.stop(), timeout=5)
+
+        self.logger.debug(f'NostrTransport.__aexit__ $')
 
     @log_exceptions
     async def main_loop(self):
