@@ -2183,6 +2183,12 @@ class Commands(Logger):
             except asyncio.TimeoutError:
                 raise TimeoutError("Could not find configured swap provider. Set up another one. See 'get_submarine_swap_providers'")
 
+            self.logger.info(f"wex_reverse_swap; Wait until transport is connected.")
+            try:
+                await asyncio.wait_for(transport.is_connected.wait(), timeout=15)
+            except asyncio.TimeoutError:
+                raise TimeoutError("Transport failed to connect in 15 seconds.")
+
             self.logger.info(f"wex_reverse_swap; About to get reverse swap data.")
             claim_fee = sm.get_fee_for_txbatcher()
             self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}'")
