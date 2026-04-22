@@ -1874,6 +1874,8 @@ class NostrTransport(SwapServerTransport):
     LIQUIDITY_UPDATE_INTERVAL_SEC = 30
 
     def __init__(self, config, sm, keypair: Keypair):
+        Logger.__init__(self)
+        self.logger.debug(f'NostrTransport: * keypair.pubkey={keypair.pubkey.hex()}')
         SwapServerTransport.__init__(self, config=config, sm=sm)
         self._offers = {}  # type: Dict[str, SwapOffer]
         self.private_key = keypair.privkey
@@ -1885,30 +1887,48 @@ class NostrTransport(SwapServerTransport):
         self.taskgroup = OldTaskGroup()
         self._last_swapserver_relays = self._load_last_swapserver_relays()  # type: Optional[Sequence[str]]
         self._swap_server_requests = asyncio.Queue(maxsize=5)  # type: asyncio.Queue[dict]
+        self.logger.debug(f'NostrTransport: $')
 
     def __enter__(self):
+        self.logger.debug(f'NostrTransport.__enter__ *')
+
         asyncio.run_coroutine_threadsafe(self.main_loop(), self.network.asyncio_loop)
+
+        self.logger.debug(f'NostrTransport.__enter__ $')
         return self
 
     def __exit__(self, ex_type, ex, tb):
+        self.logger.debug(f'NostrTransport.__exit__ *')
+
         fut = asyncio.run_coroutine_threadsafe(self.stop(), self.network.asyncio_loop)
         fut.result(timeout=5)
 
+        self.logger.debug(f'NostrTransport.__exit__ $')
+
     async def __aenter__(self):
+        self.logger.debug(f'NostrTransport.__aenter__ *')
+
         asyncio.create_task(self.main_loop())
+
+        self.logger.debug(f'NostrTransport.__aenter__ $')
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.logger.debug(f'NostrTransport.__aexit__ *')
+
         await wait_for2(self.stop(), timeout=5)
+
+        self.logger.debug(f'NostrTransport.__aexit__ $')
 
     @log_exceptions
     async def main_loop(self):
-        self.logger.info(f'starting nostr transport with pubkey: {self.nostr_pubkey}')
-        self.logger.info(f'nostr relays: {self.relays}')
+        self.logger.debug(f'NostrTransport.main_loop: *')
+        self.logger.info(f'NostrTransport.main_loop: starting nostr transport with pubkey: {self.nostr_pubkey}')
+        self.logger.info(f'NostrTransport.main_loop: nostr relays: {self.relays}')
         self.relay_manager = self.get_relay_manager()
         await self.relay_manager.connect()
         connected_relays = self.relay_manager.relays
-        self.logger.info(f'connected relays: {[relay.url for relay in connected_relays]}')
+        self.logger.info(f'NostrTransport.main_loop: connected relays: {[relay.url for relay in connected_relays]}')
         if connected_relays:
             self.is_connected.set()
         if self.sm.is_server:
@@ -1927,18 +1947,22 @@ class NostrTransport(SwapServerTransport):
                 for task in tasks:
                     await group.spawn(task)
         except Exception as e:
-            self.logger.exception("taskgroup died.")
+            self.logger.exception("NostrTransport.main_loop: Taskgroup died.")
         finally:
-            self.logger.info("taskgroup stopped.")
+            self.logger.info("NostrTransport.main_loop: $<taskgroup stopped>")
 
     @log_exceptions
     async def stop(self):
-        self.logger.info("shutting down nostr transport")
+        self.logger.info("NostrTransport.stop: *")
+        self.logger.info("NostrTransport.stop: Shutting down nostr transport")
         self.sm.is_initialized.clear()
         self.is_connected.clear()
         await self.taskgroup.cancel_remaining()
+
+        self.logger.info("NostrTransport.stop: Close relay manager")
         await self.relay_manager.close()
-        self.logger.info("nostr transport shut down")
+
+        self.logger.info("NostrTransport.stop: $<nostr transport shut down>")
 
     @property
     def relays(self):
