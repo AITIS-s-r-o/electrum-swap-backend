@@ -1959,9 +1959,8 @@ class NostrTransport(SwapServerTransport):
         self.is_connected.clear()
         await self.taskgroup.cancel_remaining()
 
-        if self.relay_manager is not None:
-            self.logger.info("NostrTransport.stop: Close relay manager")
-            await self.relay_manager.close()
+        self.logger.info("NostrTransport.stop: Close relay manager")
+        await self.relay_manager.close()
 
         self.logger.info("NostrTransport.stop: $<nostr transport shut down>")
 
