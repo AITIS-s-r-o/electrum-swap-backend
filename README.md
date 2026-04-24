@@ -34,10 +34,6 @@ For mainnet, modify `~/.electrum/regtest/config` file and put there this content
 
 ```json
 {
-    "blockchain_preferred_block": {
-        "hash": "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
-        "height": 0
-    },
     "check_updates": false,
     "config_version": 3,
     "decimal_point": 8,
