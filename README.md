@@ -5,7 +5,7 @@ Licence: MIT Licence
 Language: Python (>= 3.10)
 ```
 
-This repository contains modified [Electrum codebase](https://github.com/spesmilo/electrum) for the needs of the [Whale's Exchange](https://whales.exchange) to provide actual swap functionality.
+This repository forks [Electrum codebase](https://github.com/spesmilo/electrum) for the needs of the [Whale's Exchange](https://whales.exchange) to provide actual swap functionality.
 
 The complete Whale's Exchange design overview is shown in the GitHub [repository](https://github.com/AITIS-s-r-o/whales-exchange-web-app) of the frontend application.
 
