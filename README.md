@@ -25,12 +25,11 @@ source venv/bin/activate
 # Compile the app once.
 ELECTRUM_ECC_DONT_COMPILE=1 python3 -m pip install ".[gui,crypto]"
 
-# Create a new regtest wallet
-./run_electrum --regtest create
-```
+# Running on regtest.
 
+## Create configuration file.
 
-For mainnet, modify `~/.electrum/regtest/config` file and put there this content:
+For regtest, modify `~/.electrum/regtest/config` file and put there this content:
 
 ```json
 {
@@ -40,9 +39,6 @@ For mainnet, modify `~/.electrum/regtest/config` file and put there this content
     "log_to_file": true,
     "logs_num_files_keep": 10,
     "nostr_relays": "ws://127.0.0.1:8080",
-    "recently_open": [
-        "/home/<YOUR_USERNAME>/.electrum/regtest/wallets/default_wallet"
-    ],
     "rpcpassword": "pass",
     "rpcport": 7777,
     "rpcuser": "user",
@@ -51,7 +47,30 @@ For mainnet, modify `~/.electrum/regtest/config` file and put there this content
 }
 ```
 
+This configuration assumes that you run a Nostr relay on localhost on port 8080.
 
+
+## Start daemon.
+
+```bash
+./run_electrum --regtest daemon -d
+
+```
+
+## Create a new regtest wallet.
+
+```bash
+./run_electrum --regtest create
+```
+
+## Stop daemon.
+
+```bash
+./run_electrum --regtest daemon -d
+
+```
+
+## Run the daemon regularly.
 To actually run the app, execute the following command:
 
 ```bash
