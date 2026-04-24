@@ -50,7 +50,6 @@ For mainnet, modify `~/.electrum/regtest/config` file and put there this content
     "rpcpassword": "pass",
     "rpcport": 7777,
     "rpcuser": "user",
-    "swapserver_npub": "npub1ukxxetvyxywzpuxraq35t0vehf3vvvah5ataa9v784ukgkgyj0lswdgu9g",
     "server": "172.18.208.1:50001:t",
     "terms_of_use_accepted": 1,
     "use_gossip": true
