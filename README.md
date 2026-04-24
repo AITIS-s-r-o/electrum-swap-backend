@@ -24,39 +24,45 @@ source venv/bin/activate
 
 # Compile the app once.
 ELECTRUM_ECC_DONT_COMPILE=1 python3 -m pip install ".[gui,crypto]"
+
+# Create a new regtest wallet
+./run_electrum --regtest create
 ```
 
 
-For mainnet, modify `~/.electrum/config` file and put there this content:
+For mainnet, modify `~/.electrum/regtest/config` file and put there this content:
 
 ```json
 {
     "blockchain_preferred_block": {
-        "hash": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+        "hash": "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
         "height": 0
     },
     "check_updates": false,
     "config_version": 3,
-    "current_wallet": "/home/<YOUR_USER>/.electrum/wallets/default_wallet",
+    "current_wallet": "/home/<YOUR_USERNAME>/.electrum/regtest/wallets/default_wallet",
     "decimal_point": 8,
     "log_to_file": true,
     "logs_num_files_keep": 10,
-    "nostr_relays": "wss://relay.getalby.com/v1,wss://nos.lol,wss://relay.damus.io,wss://brb.io,wss://relay.primal.net,wss://ftp.halifax.rwth-aachen.de/nostr,wss://eu.purplerelay.com,wss://nostr.einundzwanzig.space,wss://nostr.mom",
+    "nostr_relays": "ws://127.0.0.1:8080",
     "recently_open": [
-        "/home/<YOUR_USER>/.electrum/wallets/default_wallet"
+        "/home/<YOUR_USERNAME>/.electrum/regtest/wallets/default_wallet"
     ],
     "rpcpassword": "pass",
     "rpcport": 7777,
     "rpcuser": "user",
+    "swapserver_npub": "npub1ukxxetvyxywzpuxraq35t0vehf3vvvah5ataa9v784ukgkgyj0lswdgu9g",
+    "server": "172.18.208.1:50001:t",
     "terms_of_use_accepted": 1,
     "use_gossip": true
 }
 ```
 
+
 To actually run the app, execute the following command:
 
 ```bash
-./daemon.sh
+./daemon-regtest.sh
 ```
 
 To test that the app is working correctly, you can use the following command:
