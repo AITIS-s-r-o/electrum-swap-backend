@@ -41,12 +41,13 @@ For regtest, modify `~/.electrum/regtest/config` file and put there this content
     "rpcpassword": "pass",
     "rpcport": 7777,
     "rpcuser": "user",
+    "server": "127.0.0.1:50001:t",
     "terms_of_use_accepted": 1,
     "use_gossip": true
 }
 ```
 
-This configuration assumes that you run a Nostr relay on localhost on port 8080.
+This configuration assumes that you run a Nostr relay (such as [nostr-rs-relay](https://github.com/scsibug/nostr-rs-relay)) on localhost on port 8080 and Electrum Server (such as [Fulcrum](https://github.com/cculianu/Fulcrum/)) on port 50001.
 
 
 ### Start daemon.
