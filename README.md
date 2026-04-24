@@ -68,7 +68,7 @@ To actually run the app, execute the following command:
 To test that the app is working correctly, you can use the following command:
 
 ```bash
-./run_electrum get_submarine_swap_providers
+./run_electrum --regtest get_submarine_swap_providers
 ```
 
 See the [README](https://github.com/spesmilo/electrum#electrum---lightweight-bitcoin-client) of the forked Electrum codebase for more details on how to use the app and its features.
