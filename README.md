@@ -13,7 +13,7 @@ The complete Whale's Exchange design overview is shown in the GitHub [repository
 
 We welcome contributions to the Whale's Exchange! If you have an idea for a new feature, improvement, or bug fix, please submit a pull request. For major changes, please open an issue first to discuss what you would like to change.
 
-To set up the app locally, you should follow the following steps on Linux or Windows (WSL):
+To set up the app locally for regtest, you should follow the following steps on Linux or Windows (WSL):
 
 ```bash
 cd electrum-swap-backend
@@ -24,10 +24,9 @@ source venv/bin/activate
 
 # Compile the app once.
 ELECTRUM_ECC_DONT_COMPILE=1 python3 -m pip install ".[gui,crypto]"
+```
 
-# Running on regtest.
-
-## Create configuration file.
+### Create configuration file.
 
 For regtest, modify `~/.electrum/regtest/config` file and put there this content:
 
@@ -50,27 +49,27 @@ For regtest, modify `~/.electrum/regtest/config` file and put there this content
 This configuration assumes that you run a Nostr relay on localhost on port 8080.
 
 
-## Start daemon.
+### Start daemon.
 
 ```bash
 ./run_electrum --regtest daemon -d
 
 ```
 
-## Create a new regtest wallet.
+### Create a new regtest wallet.
 
 ```bash
 ./run_electrum --regtest create
 ```
 
-## Stop daemon.
+### Stop daemon.
 
 ```bash
 ./run_electrum --regtest daemon -d
 
 ```
 
-## Run the daemon regularly.
+### Run the daemon regularly.
 To actually run the app, execute the following command:
 
 ```bash
