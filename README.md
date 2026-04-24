@@ -1,156 +1,71 @@
-# Electrum - Lightweight Bitcoin client
+# Electrum - Lightweight Bitcoin client modified for the needs of the [Whales Exchange](https://whales.exchange) project
 
 ```
 Licence: MIT Licence
-Author: Thomas Voegtlin
 Language: Python (>= 3.10)
-Homepage: https://electrum.org/
 ```
 
-[![Build Status](https://api.cirrus-ci.com/github/spesmilo/electrum.svg?branch=master)](https://cirrus-ci.com/github/spesmilo/electrum)
-[![Test coverage statistics](https://coveralls.io/repos/github/spesmilo/electrum/badge.svg?branch=master)](https://coveralls.io/github/spesmilo/electrum?branch=master)
-[![Help translate Electrum online](https://d322cqt584bo4o.cloudfront.net/electrum/localized.svg)](https://crowdin.com/project/electrum)
+This repository contains modified [Electrum codebase](https://github.com/spesmilo/electrum) for the needs of the [Whale's Exchange](https://whales.exchange) to provide actual swap functionality.
 
-
-## Getting started
-
-_(If you've come here looking to simply run Electrum,
-[you may download it here](https://electrum.org/#download).)_
-
-Electrum itself is pure Python, and so are most of the required dependencies,
-but not everything. The following sections describe how to run from source, but here
-is a TL;DR:
-
-```
-$ sudo apt-get install libsecp256k1-dev
-$ ELECTRUM_ECC_DONT_COMPILE=1 python3 -m pip install --user ".[gui,crypto]"
-```
-
-### Not pure-python dependencies
-
-#### Qt GUI
-
-If you want to use the Qt interface, install the Qt dependencies:
-```
-$ sudo apt-get install python3-pyqt6
-```
-
-#### libsecp256k1
-
-For elliptic curve operations,
-[libsecp256k1](https://github.com/bitcoin-core/secp256k1)
-is a required dependency.
-
-If you "pip install" Electrum, by default libsecp will get compiled locally,
-as part of the `electrum-ecc` dependency. This can be opted-out of,
-by setting the `ELECTRUM_ECC_DONT_COMPILE=1` environment variable.
-For the compilation to work, besides a C compiler, you need at least:
-```
-$ sudo apt-get install automake libtool
-```
-If you opt out of the compilation, you need to provide libsecp in another way, e.g.:
-```
-$ sudo apt-get install libsecp256k1-dev
-```
-
-#### cryptography
-
-Due to the need for fast symmetric ciphers,
-[cryptography](https://github.com/pyca/cryptography) is required.
-Install from your package manager (or from pip):
-```
-$ sudo apt-get install python3-cryptography
-```
-
-#### hardware-wallet support
-
-If you would like hardware wallet support,
-[see this](https://github.com/spesmilo/electrum-docs/blob/master/hardware-linux.rst).
-
-
-### Running from tar.gz
-
-If you downloaded the official package (tar.gz), you can run
-Electrum from its root directory without installing it on your
-system; all the pure python dependencies are included in the 'packages'
-directory. To run Electrum from its root directory, just do:
-```
-$ ./run_electrum
-```
-
-You can also install Electrum on your system, by running this command:
-```
-$ sudo apt-get install python3-setuptools python3-pip
-$ python3 -m pip install --user .
-```
-
-This will download and install the Python dependencies used by
-Electrum instead of using the 'packages' directory.
-It will also place an executable named `electrum` in `~/.local/bin`,
-so make sure that is on your `PATH` variable.
-
-
-### Development version (git clone)
-
-_(For OS-specific instructions, see [here for Windows](contrib/build-wine/README_windows.md),
-and [for macOS](contrib/osx/README_macos.md))_
-
-Check out the code from GitHub:
-```
-$ git clone https://github.com/spesmilo/electrum.git
-$ cd electrum
-$ git submodule update --init
-```
-
-Run install (this should install dependencies):
-```
-$ python3 -m pip install --user -e .
-```
-
-Create translations (optional):
-```
-$ sudo apt-get install gettext
-$ ./contrib/locale/build_locale.sh electrum/locale/locale electrum/locale/locale
-```
-
-Finally, to start Electrum:
-```
-$ ./run_electrum
-```
-
-### Run tests
-
-Run unit tests with `pytest`:
-```
-$ pytest tests -v
-```
-(can be parallelized with `-n auto` option, using [`pytest-xdist`](https://github.com/pytest-dev/pytest-xdist) plugin)
-
-To run a single file, specify it directly like this:
-```
-$ pytest tests/test_bitcoin.py -v
-```
-
-## Creating Binaries
-
-- [Linux (tarball)](contrib/build-linux/sdist/README.md)
-- [Linux (AppImage)](contrib/build-linux/appimage/README.md)
-- [macOS](contrib/osx/README.md)
-- [Windows](contrib/build-wine/README.md)
-- [Android](contrib/android/Readme.md)
-
+The complete Whale's Exchange design overview is shown in the GitHub [repository](https://github.com/AITIS-s-r-o/whales-exchange-web-app) of the frontend application.
 
 ## Contributing
 
-Any help testing the software, reporting or fixing bugs, reviewing pull requests
-and recent changes, writing tests, or helping with outstanding issues is very welcome.
-Implementing new features, or improving/refactoring the codebase, is of course
-also welcome, but to avoid wasted effort, especially for larger changes,
-we encourage discussing these on the issue tracker or IRC first.
+We welcome contributions to the Whale's Exchange! If you have an idea for a new feature, improvement, or bug fix, please submit a pull request. For major changes, please open an issue first to discuss what you would like to change.
 
-Besides [GitHub](https://github.com/spesmilo/electrum),
-most communication about Electrum development happens on IRC, in the
-`#electrum` channel on Libera Chat. The easiest way to participate on IRC is
-with the web client, [web.libera.chat](https://web.libera.chat/#electrum).
+To set up the app locally, you should follow the following steps on Linux or Windows (WSL):
 
-Please improve translations on [Crowdin](https://crowdin.com/project/electrum).
+```bash
+cd electrum-swap-backend
+
+# Create a virtual environment and activate it.
+python3 -m venv venv
+source venv/bin/activate
+
+# Compile the app once.
+ELECTRUM_ECC_DONT_COMPILE=1 python3 -m pip install ".[gui,crypto]"
+```
+
+
+For mainnet, modify `~/.electrum/config` file and put there this content:
+
+```json
+{
+    "blockchain_preferred_block": {
+        "hash": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+        "height": 0
+    },
+    "check_updates": false,
+    "config_version": 3,
+    "current_wallet": "/home/<YOUR_USER>/.electrum/wallets/default_wallet",
+    "decimal_point": 8,
+    "log_to_file": true,
+    "logs_num_files_keep": 10,
+    "nostr_relays": "wss://relay.getalby.com/v1,wss://nos.lol,wss://relay.damus.io,wss://brb.io,wss://relay.primal.net,wss://ftp.halifax.rwth-aachen.de/nostr,wss://eu.purplerelay.com,wss://nostr.einundzwanzig.space,wss://nostr.mom",
+    "recently_open": [
+        "/home/<YOUR_USER>/.electrum/wallets/default_wallet"
+    ],
+    "rpcpassword": "pass",
+    "rpcport": 7777,
+    "rpcuser": "user",
+    "terms_of_use_accepted": 1,
+    "use_gossip": true
+}
+```
+
+To actually run the app, execute the following command:
+
+```bash
+./daemon.sh
+```
+
+To test that the app is working correctly, you can use the following command:
+
+```bash
+./run_electrum get_submarine_swap_providers
+```
+
+## Resources
+
+- Get Help: [Support Center](https://t.me/whales_secret_support)
+- Follow us: [X/Twitter](https://x.com/WhalesSecret)
