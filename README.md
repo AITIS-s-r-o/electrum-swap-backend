@@ -40,7 +40,6 @@ For mainnet, modify `~/.electrum/regtest/config` file and put there this content
     },
     "check_updates": false,
     "config_version": 3,
-    "current_wallet": "/home/<YOUR_USERNAME>/.electrum/regtest/wallets/default_wallet",
     "decimal_point": 8,
     "log_to_file": true,
     "logs_num_files_keep": 10,
