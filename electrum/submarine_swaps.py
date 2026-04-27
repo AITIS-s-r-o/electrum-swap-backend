@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import os
 import ssl
@@ -354,6 +355,22 @@ class SwapManager(Logger):
             keypair = self.lnworker.nostr_keypair if self.is_server else generate_random_keypair()
             return NostrTransport(self.config, self, keypair)
 
+    # This is a copy of create_transport method above with modifications for WEX. Specifically, it forces the use of NostrTransport and sets the server pubkey in the config from 
+    # the parameter.
+    def wex_create_transport(self, provider_pk) -> 'SwapServerTransport':
+        """
+        arg:str:provider_pk:Public key of the swap provider.
+        """
+        from .lnutil import generate_random_keypair
+
+        # Create a shallow copy of the config and set SWAPSERVER_NPUB only in the copy.
+        config_copy = copy.copy(self.config)
+        config_copy.SWAPSERVER_NPUB = to_nip19('npub', provider_pk)
+
+        self.logger.debug(f"Using npub {config_copy.SWAPSERVER_NPUB}.")
+        keypair = self.lnworker.nostr_keypair if self.is_server else generate_random_keypair()
+        return NostrTransport(config_copy, self, keypair)
+            
     async def wait_for_swap_transport(self, new_swap_transport: 'SwapServerTransport') -> bool:
         """
         Wait until we found the announcement event of the configured swap server.
@@ -902,6 +919,42 @@ class SwapManager(Logger):
         self.add_lnwatcher_callback(swap)
         return swap
 
+    # This is a copy of add_reverse_swap method above with modifications for WEX.
+    def wex_add_reverse_swap(
+        self,
+        *,
+        redeem_script: bytes,
+        locktime: int,  # onchain
+        lightning_amount_sat: int,
+        onchain_amount_sat: int,
+        payment_hash: bytes,
+        prepay_hash: Optional[bytes] = None,
+        claim_to_output: Optional[TxOutput] = None,
+    ) -> SwapData:
+        lockup_address = script_to_p2wsh(redeem_script)
+        if claim_to_output is not None:
+            # the claim_to_output value needs to be lower than the funding utxo value, otherwise
+            # there are no funds left for the fee of the claim tx
+            assert claim_to_output.value < onchain_amount_sat, f"{claim_to_output=} >= {onchain_amount_sat=}"
+            claim_to_output = (claim_to_output.address, claim_to_output.value)
+        swap = SwapData(
+            redeem_script=redeem_script,
+            locktime=locktime,
+            privkey="",
+            preimage="",
+            prepay_hash=prepay_hash,
+            lockup_address=lockup_address,
+            onchain_amount=onchain_amount_sat,
+            claim_to_output=claim_to_output,
+            lightning_amount=lightning_amount_sat,
+            is_reverse=True,
+            is_redeemed=False,
+            funding_txid=None,
+            spending_txid=None,
+        )
+        swap._payment_hash = payment_hash
+        return swap
+
     def server_add_swap_invoice(self, request: dict) -> dict:
         """ server method.
         (client-forward-swap phase2)
@@ -1261,6 +1314,159 @@ class SwapManager(Logger):
         await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         return swap.funding_txid
 
+    # This is a copy of reverse_swap method above with modifications for WEX.
+    async def wex_reverse_swap(
+            self,
+            *,
+            transport: 'SwapServerTransport',
+            lightning_amount_sat: int,
+            expected_onchain_amount_sat: int,
+            prepayment_sat: int,
+            provider_pk: str,
+            hash: str,
+            claim_pk: str,
+            channels: Optional[Sequence['Channel']] = None,
+            claim_to_output: Optional[TxOutput] = None,
+    ) -> Optional[SwapData]:
+        """Send on Lightning, receive on-chain.
+
+        arg:provider_pk:str:Selected swap provider's public key in hex.
+        arg:hash:str:Hash of the preimage in hex.
+        arg:claim_pk:str:Public key in hex that the server should use in the redeem script to allow the user to claim the on-chain output.
+
+        - User generates preimage, RHASH. Sends RHASH to server.  (RPC 'createswap')
+        - Server creates an LN invoice for RHASH.
+        - User pays LN invoice - except server needs to hold the HTLC as preimage is unknown.
+            - if the server requested a fee prepayment (using 'minerFeeInvoice'),
+              the server will have the preimage for that. The user will send HTLCs for both the main RHASH,
+              and for the fee prepayment. Once both MPP sets arrive at the server, the server will fulfill
+              the HTLCs for the fee prepayment (before creating the on-chain output).
+        - Server creates on-chain output locked to RHASH.
+        - User spends on-chain output, revealing preimage.
+        - Server fulfills HTLC using preimage.
+
+        cltv safety requirement: (onchain_locktime < LN_locktime),   otherwise server is vulnerable
+
+        Note: expected_onchain_amount_sat is BEFORE deducting the on-chain claim tx fee.
+        Note: prepayment_sat is passed as argument instead of accessing self.mining_fee to ensure
+        the mining fees the user sees in the GUI are also the values used for the checks performed here.
+        We commit to prepayment_sat as it limits the max fee pre-payment amt, which the server is trusted with.
+        """
+        assert self.network
+        assert self.lnwatcher
+        self._sanity_check_swap_costs(
+            incoming_sat=expected_onchain_amount_sat, outgoing_sat=lightning_amount_sat)
+        """* WEX privkey = os.urandom(32)
+        our_pubkey = ECPrivkey(privkey).get_public_key_bytes(compressed=True)
+        preimage = os.urandom(32)
+        payment_hash = sha256(preimage)
+        """
+        our_pubkey =  bytes.fromhex(claim_pk)
+        payment_hash = bytes.fromhex(hash)
+
+        request_data = {
+            "type": "reversesubmarine",
+            "pairId": "BTC/BTC",
+            "invoiceAmount": lightning_amount_sat,
+            "preimageHash": payment_hash.hex(),
+            "claimPublicKey": our_pubkey.hex(),
+        }
+        self.logger.debug(f'rswap: sending request for {lightning_amount_sat}')
+        data = await transport.wex_send_request_to_server(provider_pk, 'createswap', request_data,)
+        try:
+            invoice = data['invoice']
+            assert isinstance(invoice, str), type(invoice)
+            fee_invoice = data.get('minerFeeInvoice')
+            assert fee_invoice is None or isinstance(fee_invoice, str), type(fee_invoice)
+            lockup_address = data['lockupAddress']
+            assert isinstance(lockup_address, str), type(lockup_address)
+            assert bitcoin.is_address(lockup_address), lockup_address
+            redeem_script = bytes.fromhex(data['redeemScript'])
+            locktime = data['timeoutBlockHeight']
+            assert isinstance(locktime, int), type(locktime)
+            onchain_amount = data["onchainAmount"]
+            assert isinstance(onchain_amount, int), type(onchain_amount)
+            response_id = data['id']
+        except Exception as e:
+            self.logger.error(f"failed to parse response from swapserver for createswap: {e!r}")
+            raise SwapServerError("failed to parse response from swapserver for createswap") from e
+        del data  # parsing done
+        self.logger.debug(f'rswap: {response_id=}')
+        # verify redeem_script is built with our pubkey and preimage
+        _check_swap_scriptcode(
+            redeem_script=redeem_script,
+            lockup_address=lockup_address,
+            payment_hash=payment_hash,
+            locktime=locktime,
+            refund_pubkey=None,
+            claim_pubkey=our_pubkey,
+        )
+        # check that the onchain amount is what we expected
+        if onchain_amount < expected_onchain_amount_sat:
+            raise Exception(f"rswap check failed: onchain_amount is less than what we expected: "
+                            f"{onchain_amount} < {expected_onchain_amount_sat}")
+        # verify that we will have enough time to get our tx confirmed
+        if locktime - self.network.get_local_height() <= MIN_LOCKTIME_DELTA:
+            raise Exception("rswap check failed: locktime too close")
+        if self.network.blockchain().is_tip_stale():
+            raise Exception("our blockchain tip is stale")
+        # verify invoice payment_hash
+        lnaddr = self.lnworker._check_bolt11_invoice(invoice)
+        invoice_amount = int(lnaddr.get_amount_sat())
+        if lnaddr.paymenthash != payment_hash:
+            raise Exception("rswap check failed: inconsistent RHASH and invoice")
+        if fee_invoice:
+            fee_lnaddr = self.lnworker._check_bolt11_invoice(fee_invoice)
+            if fee_lnaddr.get_amount_sat() > prepayment_sat:
+                raise SwapServerError(_("Mining fee requested by swap-server larger "
+                                        "than what was announced in their offer."))
+            invoice_amount += fee_lnaddr.get_amount_sat()
+            prepay_hash = fee_lnaddr.paymenthash
+        else:
+            prepay_hash = None
+        # check that the lightning amount is what we requested
+        if int(invoice_amount) != lightning_amount_sat:
+            raise Exception(f"rswap check failed: invoice_amount ({invoice_amount}) "
+                            f"not what we requested ({lightning_amount_sat})")
+        """WEX
+        # save swap data to wallet file
+        swap = self.add_reverse_swap(
+            redeem_script=redeem_script,
+            locktime=locktime,
+            privkey=privkey,
+            preimage=preimage,
+            payment_hash=payment_hash,
+            prepay_hash=prepay_hash,
+            onchain_amount_sat=onchain_amount,
+            lightning_amount_sat=lightning_amount_sat,
+            claim_to_output=claim_to_output,
+        )
+        # initiate fee payment.
+        if fee_invoice:
+            fee_invoice_obj = Invoice.from_bech32(fee_invoice)
+            asyncio.ensure_future(self.lnworker.pay_invoice(fee_invoice_obj))
+        # we return if we detect funding
+        async def wait_for_funding(swap):
+            while swap.funding_txid is None:
+                await asyncio.sleep(0.1)
+        # initiate main payment
+        invoice_obj = Invoice.from_bech32(invoice)
+        tasks = [asyncio.create_task(self.lnworker.pay_invoice(invoice_obj, channels=channels)), asyncio.create_task(wait_for_funding(swap))]
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        return swap.funding_txid
+        """
+
+        swap = self.wex_add_reverse_swap(
+            redeem_script=redeem_script,
+            locktime=locktime,
+            payment_hash=payment_hash,
+            prepay_hash=prepay_hash,
+            onchain_amount_sat=onchain_amount,
+            lightning_amount_sat=lightning_amount_sat,
+            claim_to_output=claim_to_output,
+        )
+        return swap, invoice, fee_invoice
+        
     def _add_swap(self, payment_hash: bytes, swap: SwapData):
         # add swap to storage
         swaps = self.wallet.db.get_dict('submarine_swaps')
@@ -1676,6 +1882,11 @@ class SwapServerTransport(Logger):
         """Might raise SwapServerError."""
         pass
 
+    # This is a copy of send_request_to_server method above with modifications for WEX.
+    async def wex_send_request_to_server(self, provider_pk: str, method: str, request_data: Optional[dict]) -> dict:
+        """Might raise SwapServerError."""
+        pass
+
     @property
     def uses_proxy(self):
         return self.network.proxy and self.network.proxy.enabled
@@ -1779,6 +1990,8 @@ class NostrTransport(SwapServerTransport):
     LIQUIDITY_UPDATE_INTERVAL_SEC = 30
 
     def __init__(self, config, sm, keypair: Keypair):
+        Logger.__init__(self)
+        self.logger.debug(f'NostrTransport: * keypair.pubkey={keypair.pubkey.hex()}')
         SwapServerTransport.__init__(self, config=config, sm=sm)
         self._offers = {}  # type: Dict[str, SwapOffer]
         self.private_key = keypair.privkey
@@ -1790,21 +2003,38 @@ class NostrTransport(SwapServerTransport):
         self.taskgroup = OldTaskGroup()
         self._last_swapserver_relays = self._load_last_swapserver_relays()  # type: Optional[Sequence[str]]
         self._swap_server_requests = asyncio.Queue(maxsize=5)  # type: asyncio.Queue[dict]
+        self.logger.debug(f'NostrTransport: $')
 
     def __enter__(self):
+        self.logger.debug(f'NostrTransport.__enter__ *')
+
         asyncio.run_coroutine_threadsafe(self.main_loop(), self.network.asyncio_loop)
+
+        self.logger.debug(f'NostrTransport.__enter__ $')
         return self
 
     def __exit__(self, ex_type, ex, tb):
+        self.logger.debug(f'NostrTransport.__exit__ *')
+
         fut = asyncio.run_coroutine_threadsafe(self.stop(), self.network.asyncio_loop)
         fut.result(timeout=5)
 
+        self.logger.debug(f'NostrTransport.__exit__ $')
+
     async def __aenter__(self):
+        self.logger.debug(f'NostrTransport.__aenter__ *')
+
         asyncio.create_task(self.main_loop())
+
+        self.logger.debug(f'NostrTransport.__aenter__ $')
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.logger.debug(f'NostrTransport.__aexit__ *')
+
         await wait_for2(self.stop(), timeout=5)
+
+        self.logger.debug(f'NostrTransport.__aexit__ $')
 
     def destroy(self):
         super().destroy()
@@ -1812,12 +2042,13 @@ class NostrTransport(SwapServerTransport):
 
     @log_exceptions
     async def main_loop(self):
-        self.logger.info(f'starting nostr transport with pubkey: {self.nostr_pubkey}')
-        self.logger.info(f'nostr relays: {self.relays}')
+        self.logger.debug(f'NostrTransport.main_loop: *')
+        self.logger.info(f'NostrTransport.main_loop: starting nostr transport with pubkey: {self.nostr_pubkey}')
+        self.logger.info(f'NostrTransport.main_loop: nostr relays: {self.relays}')
         self.relay_manager = self.get_relay_manager()
         await self.relay_manager.connect()
         connected_relays = self.relay_manager.relays
-        self.logger.info(f'connected relays: {[relay.url for relay in connected_relays]}')
+        self.logger.info(f'NostrTransport.main_loop: connected relays: {[relay.url for relay in connected_relays]}')
         if connected_relays:
             self.is_connected.set()
         if self.sm.is_server:
@@ -1836,18 +2067,22 @@ class NostrTransport(SwapServerTransport):
                 for task in tasks:
                     await group.spawn(task)
         except Exception as e:
-            self.logger.exception("taskgroup died.")
+            self.logger.exception("NostrTransport.main_loop: Taskgroup died.")
         finally:
-            self.logger.info("taskgroup stopped.")
+            self.logger.info("NostrTransport.main_loop: $<taskgroup stopped>")
 
     @log_exceptions
     async def stop(self):
-        self.logger.info("shutting down nostr transport")
+        self.logger.info("NostrTransport.stop: *")
+        self.logger.info("NostrTransport.stop: Shutting down nostr transport")
         self.sm.is_initialized.clear()
         self.is_connected.clear()
         await self.taskgroup.cancel_remaining()
+
+        self.logger.info("NostrTransport.stop: Close relay manager")
         await self.relay_manager.close()
-        self.logger.info("nostr transport shut down")
+
+        self.logger.info("NostrTransport.stop: $<nostr transport shut down>")
 
     @property
     def relays(self):
@@ -1955,6 +2190,25 @@ class NostrTransport(SwapServerTransport):
         assert isinstance(response, dict)
         if 'error' in response:
             self.logger.warning(f"error from swap server [DO NOT TRUST THIS MESSAGE]: {response['error']}")
+            raise SwapServerError()
+        return response
+
+    # This is a copy of send_request_to_server method above with modifications for WEX.
+    @log_exceptions
+    async def wex_send_request_to_server(self, provider_pk: str, method: str, request_data: dict) -> dict:
+        self.logger.debug(f"wex swapserver req: npub: {provider_pk}, method: {method} relays: {self.relays}")
+        request_data['method'] = method
+        server_pubkey = provider_pk
+
+        # Send direct message to the swap provider using Nostr.
+        event_id = await self.send_direct_message(server_pubkey, json.dumps(request_data), retries=1)
+        if not event_id:
+            raise SwapServerError()
+        self.dm_replies[(server_pubkey, event_id)] = fut = asyncio.Future()
+        response = await fut
+        assert isinstance(response, dict)
+        if 'error' in response:
+            self.logger.warning(f"error from swap server {provider_pk} [DO NOT TRUST THIS MESSAGE]: {response['error']}")
             raise SwapServerError()
         return response
 
