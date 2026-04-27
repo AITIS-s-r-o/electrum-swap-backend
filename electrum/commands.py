@@ -1838,15 +1838,30 @@ class Commands(Logger):
         return wallet.lnworker.node_keypair.pubkey.hex() + (('@' + listen_addr) if listen_addr else '')
 
     @command('wl')
-    async def list_channels(self, wallet: Abstract_Wallet = None):
-        """Return the list of Lightning channels in a wallet"""
-        # FIXME: we need to be online to display capacity of backups
+    async def list_channels(self, public: bool = False, private: bool = False, active: bool = False, open: bool = False, wallet: Abstract_Wallet = None):
+        """Return the list of channels in the wallet
+
+        arg:bool:public:list only public channels
+        arg:bool:private:list only private channels
+        arg:bool:open:list only open channels
+        arg:bool:active:list only active channels
+        """
         from .lnutil import LOCAL, REMOTE, format_short_channel_id
-        channels = list(wallet.lnworker.channels.items())
-        backups = list(wallet.lnworker.channel_backups.items())
+        if public and private:
+            raise Exception("incompatible options")
+        def _filter(chan):
+            if public and not chan.is_public():
+                return False
+            if private and chan.is_public():
+                return False
+            if active and not chan.is_redeemed():
+                return False
+            if open and not chan.is_open():
+                return False
+            return True
+
         return [
             {
-                'type': 'CHANNEL',
                 'short_channel_id': format_short_channel_id(chan.short_channel_id) if chan.short_channel_id else None,
                 'channel_id': chan.channel_id.hex(),
                 'channel_point': chan.funding_outpoint.to_str(),
@@ -1862,16 +1877,22 @@ class Commands(Logger):
                 'remote_reserve': chan.config[LOCAL].reserve_sat,
                 'local_unsettled_sent': chan.balance_tied_up_in_htlcs_by_direction(LOCAL, direction=SENT) // 1000,
                 'remote_unsettled_sent': chan.balance_tied_up_in_htlcs_by_direction(REMOTE, direction=SENT) // 1000,
-            } for channel_id, chan in channels
-        ] + [
+            } for chan in wallet.lnworker.channels.values() if _filter(chan)
+        ]
+
+    @command('wl')
+    async def list_channel_backups(self, wallet: Abstract_Wallet = None):
+        """Return the list of channel backups in the wallet"""
+        # FIXME: we need to be online to display capacity of backups
+        from .lnutil import LOCAL, REMOTE, format_short_channel_id
+        return [
             {
-                'type': 'BACKUP',
                 'short_channel_id': format_short_channel_id(chan.short_channel_id) if chan.short_channel_id else None,
                 'channel_id': chan.channel_id.hex(),
                 'channel_point': chan.funding_outpoint.to_str(),
                 'closing_txid': chan.get_closing_height()[0] if chan.get_closing_height() else None,
                 'state': chan.get_state().name,
-            } for channel_id, chan in backups
+            } for chan in wallet.lnworker.channel_backups.values()
         ]
 
     @command('wnl')
@@ -2012,20 +2033,33 @@ class Commands(Logger):
 
         arg:int:query_time:Optional timeout how long the relays should be queried for provider announcements. Default: 15 sec
         """
+
+        self.logger.debug("Commands.get_submarine_swap_providers *")
+
         sm = wallet.lnworker.swap_manager
         async with sm.create_transport() as transport:
             assert isinstance(transport, NostrTransport)
+            self.logger.debug(f"Commands.get_submarine_swap_providers: Wait {query_time} seconds")
             await asyncio.sleep(query_time)
+
+            self.logger.debug("Commands.get_submarine_swap_providers: Collect offers")
             offers = transport.get_recent_offers()
         result = {}
         for offer in offers:
+            self.logger.debug(f"Commands.get_submarine_swap_providers: Adding offer {offer}")
             result[offer.server_npub] = {
                 "percentage_fee": float(offer.pairs.percentage),
                 "max_forward_sat": offer.pairs.max_forward,
                 "max_reverse_sat": offer.pairs.max_reverse,
                 "min_amount_sat": offer.pairs.min_amount,
                 "prepayment": 2 * offer.pairs.mining_fee,
+                "mining_fee": offer.pairs.mining_fee,
+                "timestamp": offer.timestamp,
+                "server_pubkey": offer.server_pubkey,
+                "pow_bits": offer.pow_bits,
             }
+
+        self.logger.debug(f"Commands.get_submarine_swap_providers $ {result=}")
         return result
 
     @command('wnpl')
@@ -2116,6 +2150,77 @@ class Commands(Logger):
             'lightning_amount': format_satoshis(lightning_amount_sat),
             'onchain_amount': format_satoshis(onchain_amount_sat),
             'prepayment': format_satoshis(prepayment_sat)
+        }
+
+    # This is a copy of reverse_swap method above with modifications for WEX. Specifically, we do not generate secrets in Electrum code. We pass the preimage hash in an argument
+    # as well as the claim public key. The swap provider selection is also added as an argument from the caller.
+    #
+    # "p" is missing in @command definition as the command does not require a password.
+    @command('wnl')
+    async def wex_reverse_swap(
+        self, lightning_amount, onchain_amount, prepayment, hash, claim_pk, provider_pk, wallet: Abstract_Wallet = None,
+    ):
+        """
+        Reverse submarine swap: send on Lightning, receive on-chain
+
+        arg:decimal:lightning_amount:Amount to be sent, in satoshis.
+        arg:decimal:onchain_amount:Amount to be received, in satoshis.
+        arg:decimal:prepayment:Lightning payment required by the swap provider in order to cover their mining fees. This is included in lightning_amount. However, this part of
+            the operation is not trustless; the provider is trusted to fail this payment if the swap fails.
+        arg:str:hash:Hash of the preimage that will be used for the swap.
+        arg:str:claim_pk:Public key that will be used in the onchain claim transaction for the swap.
+        arg:str:provider_pk:Public key of the swap provider.
+        """
+
+        self.logger.info(f"wex_reverse_swap; lightning_amount={lightning_amount}, onchain_amount={onchain_amount}, prepayment={prepayment}, hash={hash}, claim_pk={claim_pk}, provider_pk={provider_pk}")
+
+        sm = wallet.lnworker.swap_manager
+        self.logger.info(f"wex_reverse_swap; About to create_transport.")
+        async with sm.wex_create_transport(provider_pk) as transport:
+            self.logger.info(f"wex_reverse_swap; Wait for 'is_initialized'.")
+            try:
+                await asyncio.wait_for(sm.is_initialized.wait(), timeout=15)
+            except asyncio.TimeoutError:
+                raise TimeoutError("Could not find configured swap provider. Set up another one. See 'get_submarine_swap_providers'")
+
+            self.logger.info(f"wex_reverse_swap; Wait until transport is connected.")
+            try:
+                await asyncio.wait_for(transport.is_connected.wait(), timeout=15)
+            except asyncio.TimeoutError:
+                raise TimeoutError("Transport failed to connect in 15 seconds.")
+
+            self.logger.info(f"wex_reverse_swap; About to get reverse swap data.")
+            claim_fee = sm.get_fee_for_txbatcher()
+            self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}'")
+
+            onchain_amount_sat = onchain_amount + claim_fee
+            self.logger.info(f"wex_reverse_swap; onchain_amount_sat='{onchain_amount_sat}'")
+
+            swapData, invoice, fee_invoice = await wallet.lnworker.swap_manager.wex_reverse_swap(
+                transport=transport,
+                lightning_amount_sat=lightning_amount,
+                expected_onchain_amount_sat=onchain_amount_sat,
+                prepayment_sat=prepayment,
+                provider_pk=provider_pk,
+                hash=hash,
+                claim_pk=claim_pk,
+            )
+
+            self.logger.info(f"wex_reverse_swap; swapData='{swapData}', invoice='{invoice}', fee_invoice='{fee_invoice}'")
+        return {
+            'is_reverse': swapData.is_reverse,
+            'locktime': swapData.locktime,
+            'onchain_amount': swapData.onchain_amount,
+            'lightning_amount': swapData.lightning_amount,
+            'redeem_script': swapData.redeem_script.hex(),
+            'prepay_hash': swapData.prepay_hash.hex(),
+            'lockup_address': swapData.lockup_address,
+            'claim_to_output': {
+                'address': swapData.claim_to_output.address(),
+                'amount': swapData.claim_to_output.value,
+            } if swapData.claim_to_output else None,
+            'invoice': invoice,
+            'fee_invoice': fee_invoice,
         }
 
     @command('n')
@@ -2440,7 +2545,7 @@ def get_parser():
     subparsers = parser.add_subparsers(dest='cmd', metavar='<command>')
     # gui
     parser_gui = subparsers.add_parser('gui', description="Run Electrum's Graphical User Interface.", help="Run GUI (default)")
-    parser_gui.add_argument("url", nargs='?', default=None, help="bitcoin URI (or bip70 file)")
+    parser_gui.add_argument("url", nargs='?', default=None, help="bitcoin URI")
     parser_gui.add_argument("-g", "--gui", dest=SimpleConfig.GUI_NAME.key(), help="select graphical user interface", choices=['qt', 'text', 'stdio', 'qml'])
     parser_gui.add_argument("-m", action="store_true", dest=SimpleConfig.GUI_QT_HIDE_ON_STARTUP.key(), default=False, help="hide GUI on startup")
     parser_gui.add_argument("-L", "--lang", dest=SimpleConfig.LOCALIZATION_LANGUAGE.key(), default=None, help="default language used in GUI")
