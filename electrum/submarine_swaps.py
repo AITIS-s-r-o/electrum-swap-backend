@@ -2152,7 +2152,7 @@ class NostrTransport(SwapServerTransport):
 
             # WEX Extract optional capabilities announced by the swap server. This is supposed to be a set of strings.
             caps = set(content.get('capabilities', []))
-            if not isinstance(caps, (list, tuple, set)):
+            if not isinstance(caps, (list, set)):
                 caps = []
 
             if not all(isinstance(x, str) for x in caps):
