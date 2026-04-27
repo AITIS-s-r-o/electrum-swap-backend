@@ -91,11 +91,18 @@ For mainnet, simply omit the `--regtest` flag.
 
 ### Run the daemon regularly
 
-To actually run the app, execute the following command:
+To actually run the app, execute the following command for regtest:
 
 ```bash
 ./daemon-regtest.sh
 ```
+
+or the following one for mainnet:
+
+```bash
+./daemon.sh
+```
+
 
 To test that the app is working correctly, you can use the following command:
 
