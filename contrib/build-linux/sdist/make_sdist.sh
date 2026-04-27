@@ -35,6 +35,11 @@ info "preparing electrum-locale."
     fi
 )
 
+if ([ "$OMIT_UNCLEAN_FILES" = 1 ]); then
+    # FIXME side-effecting repo... though in practice, this script probably runs in fresh_clone
+    rm -f "$PROJECT_ROOT/electrum/paymentrequest_pb2.py"
+fi
+
 (
     cd "$PROJECT_ROOT"
 

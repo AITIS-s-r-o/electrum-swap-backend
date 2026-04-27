@@ -638,8 +638,8 @@ class ElectrumGui(BaseElectrumGui, EventListener):
             invoice = self.wallet.create_invoice(
                 outputs=outputs,
                 message=self.str_description,
-                URI=None,
-            )
+                pr=None,
+                URI=None)
         else:
             self.show_message(_('Invalid Bitcoin address'))
             return None

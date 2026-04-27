@@ -233,6 +233,7 @@ class TestBaseInvoice(ElectrumTestCase):
             time=1692716965,
             exp=LN_EXPIRY_NEVER,
             outputs=outputs,
+            bip70=None,
             height=0,
             lightning_invoice=None,
         )
@@ -247,6 +248,7 @@ class TestBaseInvoice(ElectrumTestCase):
                 time=1692716965,
                 exp=LN_EXPIRY_NEVER,
                 outputs=outputs,
+                bip70=None,
                 height=0,
                 lightning_invoice=None,
             )
