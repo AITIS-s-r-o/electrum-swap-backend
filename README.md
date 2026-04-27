@@ -26,7 +26,7 @@ source venv/bin/activate
 ELECTRUM_ECC_DONT_COMPILE=1 python3 -m pip install ".[gui,crypto]"
 ```
 
-### Create configuration file.
+### Create configuration file
 
 For regtest, modify `~/.electrum/regtest/config` file and put there this content:
 
@@ -50,27 +50,47 @@ For regtest, modify `~/.electrum/regtest/config` file and put there this content
 This configuration assumes that you run a Nostr relay (such as [nostr-rs-relay](https://github.com/scsibug/nostr-rs-relay)) on localhost on port 8080 and Electrum Server (such as [Fulcrum](https://github.com/cculianu/Fulcrum/)) on port 50001.
 
 
-### Start daemon.
+For mainnet, you can use the default configuration file `~/.electrum/config` and modify it like this:
+
+```json
+{
+    "check_updates": false,
+    "config_version": 3,
+    "decimal_point": 8,
+    "log_to_file": true,
+    "logs_num_files_keep": 10,
+    "nostr_relays": "wss://relay.getalby.com/v1,wss://nos.lol,wss://relay.damus.io,wss://brb.io,wss://relay.primal.net,wss://ftp.halifax.rwth-aachen.de/nostr,wss://eu.purplerelay.com,wss://nostr.einundzwanzig.space,wss://nostr.mom",
+    "rpcpassword": "pass",
+    "rpcport": 7777,
+    "rpcuser": "user",
+    "terms_of_use_accepted": 1,
+    "use_gossip": true
+}
+```
+
+### Start daemon
 
 ```bash
 ./run_electrum --regtest daemon -d
-
 ```
 
-### Create a new regtest wallet.
+For mainnet, simply omit the `--regtest` flag.
+
+### Create a new regtest wallet
 
 ```bash
 ./run_electrum --regtest create
 ```
 
-### Stop daemon.
+### Stop daemon
 
 ```bash
 ./run_electrum --regtest daemon -d
 
 ```
 
-### Run the daemon regularly.
+### Run the daemon regularly
+
 To actually run the app, execute the following command:
 
 ```bash
