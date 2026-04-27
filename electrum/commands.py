@@ -2057,6 +2057,7 @@ class Commands(Logger):
                 "timestamp": offer.timestamp,
                 "server_pubkey": offer.server_pubkey,
                 "pow_bits": offer.pow_bits,
+                "capabilities": offer.capabilities,
             }
 
         self.logger.debug(f"Commands.get_submarine_swap_providers $ {result=}")
