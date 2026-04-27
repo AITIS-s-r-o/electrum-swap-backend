@@ -1838,30 +1838,15 @@ class Commands(Logger):
         return wallet.lnworker.node_keypair.pubkey.hex() + (('@' + listen_addr) if listen_addr else '')
 
     @command('wl')
-    async def list_channels(self, public: bool = False, private: bool = False, active: bool = False, open: bool = False, wallet: Abstract_Wallet = None):
-        """Return the list of channels in the wallet
-
-        arg:bool:public:list only public channels
-        arg:bool:private:list only private channels
-        arg:bool:open:list only open channels
-        arg:bool:active:list only active channels
-        """
+    async def list_channels(self, wallet: Abstract_Wallet = None):
+        """Return the list of Lightning channels in a wallet"""
+        # FIXME: we need to be online to display capacity of backups
         from .lnutil import LOCAL, REMOTE, format_short_channel_id
-        if public and private:
-            raise Exception("incompatible options")
-        def _filter(chan):
-            if public and not chan.is_public():
-                return False
-            if private and chan.is_public():
-                return False
-            if active and not chan.is_redeemed():
-                return False
-            if open and not chan.is_open():
-                return False
-            return True
-
+        channels = list(wallet.lnworker.channels.items())
+        backups = list(wallet.lnworker.channel_backups.items())
         return [
             {
+                'type': 'CHANNEL',
                 'short_channel_id': format_short_channel_id(chan.short_channel_id) if chan.short_channel_id else None,
                 'channel_id': chan.channel_id.hex(),
                 'channel_point': chan.funding_outpoint.to_str(),
@@ -1877,22 +1862,16 @@ class Commands(Logger):
                 'remote_reserve': chan.config[LOCAL].reserve_sat,
                 'local_unsettled_sent': chan.balance_tied_up_in_htlcs_by_direction(LOCAL, direction=SENT) // 1000,
                 'remote_unsettled_sent': chan.balance_tied_up_in_htlcs_by_direction(REMOTE, direction=SENT) // 1000,
-            } for chan in wallet.lnworker.channels.values() if _filter(chan)
-        ]
-
-    @command('wl')
-    async def list_channel_backups(self, wallet: Abstract_Wallet = None):
-        """Return the list of channel backups in the wallet"""
-        # FIXME: we need to be online to display capacity of backups
-        from .lnutil import LOCAL, REMOTE, format_short_channel_id
-        return [
+            } for channel_id, chan in channels
+        ] + [
             {
+                'type': 'BACKUP',
                 'short_channel_id': format_short_channel_id(chan.short_channel_id) if chan.short_channel_id else None,
                 'channel_id': chan.channel_id.hex(),
                 'channel_point': chan.funding_outpoint.to_str(),
                 'closing_txid': chan.get_closing_height()[0] if chan.get_closing_height() else None,
                 'state': chan.get_state().name,
-            } for chan in wallet.lnworker.channel_backups.values()
+            } for channel_id, chan in backups
         ]
 
     @command('wnl')
