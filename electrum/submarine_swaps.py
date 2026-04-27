@@ -100,6 +100,8 @@ WITNESS_TEMPLATE_SWAP = [
     opcodes.OP_CHECKSIG
 ]
 
+CAP_FORWARD_V1 = "forwardv1"               # supports forward swaps with v1 flow
+
 
 def _check_swap_scriptcode(
     *,
@@ -183,6 +185,7 @@ class SwapOffer:
     pow_bits = attr.ib(type=int)
     server_pubkey = attr.ib(type=str)
     timestamp = attr.ib(type=int)
+    capabilities = attr.ib(type=set)
 
     @property
     def server_npub(self):
@@ -2146,12 +2149,24 @@ class NostrTransport(SwapServerTransport):
             except Exception:
                 self.logger.debug(f"swap fees couldn't be parsed", exc_info=True)
                 continue
+
+            # WEX Extract optional capabilities announced by the swap server. This is supposed to be a set of strings.
+            caps = set(content.get('capabilities', []))
+            if not isinstance(caps, (list, set)):
+                caps = []
+
+            if not all(isinstance(x, str) for x in caps):
+                caps = []
+
+            capabilities = set(caps)
+
             offer = SwapOffer(
                 pairs=pairs,
                 relays=server_relays[:10],
                 timestamp=event.created_at,
                 server_pubkey=pubkey,
                 pow_bits=pow_bits,
+                capabilities=capabilities,
             )
             self._offers[offer.server_npub] = offer
             if self.config.SWAPSERVER_NPUB == offer.server_npub:
