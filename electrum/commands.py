@@ -2184,8 +2184,8 @@ class Commands(Logger):
         arg:decimal:prepayment:Lightning payment required by the swap provider in order to cover their mining fees. This is included in lightning_amount. However, this part of
             the operation is not trustless; the provider is trusted to fail this payment if the swap fails.
         arg:str:hash:Hash of the preimage that will be used for the swap.
-        arg:str:claim_pk:Public key that will be used in the onchain claim transaction for the swap.
-        arg:str:provider_pk:Public key of the swap provider.
+        arg:str:claim_pk:Public key that will be used in the onchain claim transaction for the swap in hex format.
+        arg:str:provider_pk:Public key of the swap provider in hex format.
         """
 
         self.logger.info(f"wex_reverse_swap; lightning_amount={lightning_amount}, onchain_amount={onchain_amount}, prepayment={prepayment}, hash={hash}, claim_pk={claim_pk}, provider_pk={provider_pk}")
@@ -2205,7 +2205,7 @@ class Commands(Logger):
             except asyncio.TimeoutError:
                 raise TimeoutError("Transport failed to connect in 15 seconds.")
 
-            self.logger.info(f"wex_reverse_swap; About to get reverse swap data.")
+            self.logger.info("wex_reverse_swap; About to get reverse swap data.")
             claim_fee = sm.get_fee_for_txbatcher()
             self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}'")
 
@@ -2237,6 +2237,59 @@ class Commands(Logger):
             } if swapData.claim_to_output else None,
             'invoice': invoice,
             'fee_invoice': fee_invoice,
+        }
+
+    # Command for requesting forward swap using old flow.
+    #
+    # "p" is missing in @command definition as the command does not require a password.
+    @command('wnl')
+    async def wex_forward_swap(
+        self, invoice, onchain_amount_sat, refundPublicKey, provider_pk, wallet: Abstract_Wallet = None,
+    ):
+        """
+        Forward submarine swap: send on-chain, receive on Lightning
+
+        arg:decimal:invoice:BOLT11 invoice to pay the client.
+        arg:decimal:onchain_amount_sat:Amount the client is supposed to send on-chain in satoshis.
+        arg:str:refundPublicKey:Public key of the refund in hex format.
+        arg:str:provider_pk:Public key of the swap provider in hex format.
+        """
+
+        self.logger.info(f"wex_forward_swap; invoice={invoice}, onchain_amount={onchain_amount_sat}, provider_pk={provider_pk}")
+
+        sm = wallet.lnworker.swap_manager
+        self.logger.info(f"wex_forward_swap; About to create_transport.")
+        async with sm.wex_create_transport(provider_pk) as transport:
+            self.logger.info(f"wex_forward_swap; Wait for 'is_initialized'.")
+            try:
+                await asyncio.wait_for(sm.is_initialized.wait(), timeout=15)
+            except asyncio.TimeoutError:
+                raise TimeoutError("Could not find configured swap provider. Set up another one. See 'get_submarine_swap_providers'")
+
+            self.logger.info("wex_forward_swap; Wait until transport is connected.")
+            try:
+                await asyncio.wait_for(transport.is_connected.wait(), timeout=15)
+            except asyncio.TimeoutError:
+                raise TimeoutError("Transport failed to connect in 15 seconds.")
+
+            self.logger.info(f"wex_forward_swap; About to get forward swap data.")
+
+            swapData = await wallet.lnworker.swap_manager.wex_forward_swap(
+                transport=transport,
+                invoice=invoice,
+                refundPublicKey=refundPublicKey,
+                expected_onchain_amount_sat=onchain_amount_sat,
+                provider_pk=provider_pk
+            )
+
+            self.logger.info(f"wex_forward_swap; swapData='{swapData}'")
+        return {
+            'is_reverse': swapData.is_reverse,
+            'locktime': swapData.locktime,
+            'onchain_amount': swapData.onchain_amount,
+            'lightning_amount': swapData.lightning_amount,
+            'redeem_script': swapData.redeem_script.hex(),
+            'lockup_address': swapData.lockup_address
         }
 
     @command('n')
