@@ -1776,6 +1776,21 @@ class Commands(Logger):
         invoice = Invoice.from_bech32(invoice)
         return invoice.to_debug_json()
 
+    @command('')
+    async def wex_decode_invoice(self, invoice: str):
+        """
+        Decode a lightning invoice
+
+        arg:str:invoice:Lightning invoice (bolt 11)
+        """
+        invoice = Invoice.from_bech32(invoice)
+        return {
+            'amount_msat': invoice.amount_msat,
+            'rhash': invoice.rhash,
+            'time': invoice.time,
+            'expiry': invoice.exp
+        }
+
     @command('wnpl')
     async def lnpay(
         self,
