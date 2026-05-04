@@ -1776,6 +1776,7 @@ class Commands(Logger):
         invoice = Invoice.from_bech32(invoice)
         return invoice.to_debug_json()
 
+    # This is a copy of the method above with modifications for WEX.
     @command('')
     async def wex_decode_invoice(self, invoice: str):
         """
