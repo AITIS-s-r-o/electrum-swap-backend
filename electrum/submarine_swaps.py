@@ -183,8 +183,6 @@ def wex_check_normal_redeem_script(*, redeem_script, lockup_address, payment_has
     if locktime != int.from_bytes(parsed_script[6][1], byteorder='little'):
         raise Exception("fswap check failed: inconsistent locktime and script")
 
-    return parsed_script[4][1], parsed_script[9][1]
-
 def _construct_swap_scriptcode(
     payment_hash: bytes,
     locktime: int,
@@ -1537,7 +1535,7 @@ class SwapManager(Logger):
 
             redeem_script = bytes.fromhex(redeem_script_hex)
 
-            _, _ = wex_check_normal_redeem_script(
+            wex_check_normal_redeem_script(
                 redeem_script=redeem_script,
                 lockup_address=lockup_address,
                 payment_hash=payment_hash,
