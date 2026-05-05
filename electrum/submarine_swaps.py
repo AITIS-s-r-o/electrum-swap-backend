@@ -797,8 +797,6 @@ class SwapManager(Logger):
             payment_hash: bytes,
             lockup_address: str,
     ) -> Tuple[SwapData]:
-        invoice_amount_sat = lightning_amount_sat
-        
         swap = SwapData(
             redeem_script = redeem_script,
             locktime = locktime,
