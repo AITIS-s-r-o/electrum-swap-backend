@@ -154,6 +154,36 @@ def _check_swap_scriptcode(
     ):
         raise Exception("failed to rebuild swap script from scratch")
 
+# Checks that the redeem script, which was received from the swap provider, for a normal swap is correctly formed, and consistent with the other parameters.
+def wex_check_normal_redeem_script(*, redeem_script, lockup_address, payment_hash, locktime, refund_pubkey):
+    """Checks the redeem script received from the swap provider.
+
+    arg:redeem_script:bytes:Redeem script received from the swap provider to check.
+    arg:lockup_address:str:Lockup address that the swap provider gave us. We check that the redeem script corresponds to this lockup address.
+    arg:payment_hash:str:Hash of the preimage in hex. We check that this payment hash is included in the redeem script. The hash has already been verified to be consistent with
+        the lightning invoice.
+    arg:locktime:int:Locktime for the swap. We check that this locktime is included in the redeem script. We have already verified that this locktime is sufficiently far in the
+        future
+    arg:refund_pubkey:str:Public key in hex that the server should use in the redeem script to allow the user to claim the on-chain output.
+    """
+
+    parsed_script = [x for x in script_GetOp(redeem_script)]
+    if not match_script_against_template(redeem_script, WEX_WITNESS_TEMPLATE_SWAP_OLD):
+        raise Exception("fswap check failed: scriptcode does not match template")
+
+    if script_to_p2wsh(redeem_script.hex()) != lockup_address:
+        raise Exception("fswap check failed: inconsistent scriptcode and address")
+
+    if ripemd(payment_hash) != parsed_script[1][1]:
+        raise Exception("fswap check failed: our preimage not in script")
+
+    if refund_pubkey != parsed_script[9][1]:
+        raise Exception("fswap check failed: our pubkey not in script")
+
+    if locktime != int.from_bytes(parsed_script[6][1], byteorder='little'):
+        raise Exception("fswap check failed: inconsistent locktime and script")
+
+    return parsed_script[4][1], parsed_script[9][1]
 
 def _construct_swap_scriptcode(
     payment_hash: bytes,
@@ -1436,36 +1466,6 @@ class SwapManager(Logger):
         )
         return swap, invoice, fee_invoice
 
-    # Checks that the redeem script, which was received from the swap provider, for a normal swap is correctly formed, and consistent with the other parameters.
-    def wex_check_normal_redeem_script(self, *, redeem_script, lockup_address, payment_hash, locktime, refund_pubkey):
-        """Checks the redeem script received from the swap provider.
-
-        arg:redeem_script:bytes:Redeem script received from the swap provider to check.
-        arg:lockup_address:str:Lockup address that the swap provider gave us. We check that the redeem script corresponds to this lockup address.
-        arg:payment_hash:str:Hash of the preimage in hex. We check that this payment hash is included in the redeem script. The hash has already been verified to be consistent with
-            the lightning invoice.
-        arg:locktime:int:Locktime for the swap. We check that this locktime is included in the redeem script. We have already verified that this locktime is sufficiently far in the
-            future
-        arg:refund_pubkey:str:Public key in hex that the server should use in the redeem script to allow the user to claim the on-chain output.
-        """
-
-        parsed_script = [x for x in script_GetOp(redeem_script)]
-        if not match_script_against_template(redeem_script, WEX_WITNESS_TEMPLATE_SWAP_OLD):
-            raise Exception("fswap check failed: scriptcode does not match template")
-
-        if script_to_p2wsh(redeem_script.hex()) != lockup_address:
-            raise Exception("fswap check failed: inconsistent scriptcode and address")
-
-        if ripemd(payment_hash) != parsed_script[1][1]:
-            raise Exception("fswap check failed: our preimage not in script")
-
-        if refund_pubkey != parsed_script[9][1]:
-            raise Exception("fswap check failed: our pubkey not in script")
-
-        if locktime != int.from_bytes(parsed_script[6][1], byteorder='little'):
-            raise Exception("fswap check failed: inconsistent locktime and script")
-
-        return parsed_script[4][1], parsed_script[9][1]
 
     # Client method for requesting forward swap using old flow.
     async def wex_forward_swap(
@@ -1537,7 +1537,7 @@ class SwapManager(Logger):
 
             redeem_script = bytes.fromhex(redeem_script_hex)
 
-            _, _ = self.wex_check_normal_redeem_script(
+            _, _ = wex_check_normal_redeem_script(
                 redeem_script=redeem_script,
                 lockup_address=lockup_address,
                 payment_hash=payment_hash,
