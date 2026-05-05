@@ -161,7 +161,7 @@ def _wex_check_normal_redeem_script(
     lockup_address: str,
     payment_hash: str,
     locktime: int,
-    refund_pubkey: str
+    refund_pubkey: bytes
 ) -> None:
     """Checks the redeem script received from the swap provider.
 
@@ -171,7 +171,7 @@ def _wex_check_normal_redeem_script(
         the lightning invoice.
     arg:locktime:int:Locktime for the swap. We check that this locktime is included in the redeem script. We have already verified that this locktime is sufficiently far in the
         future
-    arg:refund_pubkey:str:Public key in hex that the server should use in the redeem script to allow the user to claim the on-chain output.
+    arg:refund_pubkey:bytes:Public key that the server should use in the redeem script to allow the user to claim the on-chain output.
     """
 
     parsed_script = [x for x in script_GetOp(redeem_script)]
@@ -1541,13 +1541,14 @@ class SwapManager(Logger):
             assert isinstance(redeem_script_hex, str), type(redeem_script_hex)
 
             redeem_script = bytes.fromhex(redeem_script_hex)
+            refund_pk = bytes.fromhex(refundPublicKey)
 
             _wex_check_normal_redeem_script(
                 redeem_script=redeem_script,
                 lockup_address=lockup_address,
                 payment_hash=payment_hash,
                 locktime=locktime,
-                refund_pubkey=refundPublicKey
+                refund_pubkey=refund_pk
             )
 
         except Exception as e:
