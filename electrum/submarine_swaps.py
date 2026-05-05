@@ -101,6 +101,7 @@ WITNESS_TEMPLATE_SWAP = [
 ]
 
 # Witness template used by WEX for the old forward swap flow.
+# See https://github.com/spesmilo/electrum/blob/fd10ae3a3b0c52571755d251b3e087c7aa950050/electrum/submarine_swaps.py#L45
 WEX_WITNESS_TEMPLATE_SWAP_OLD = [
     opcodes.OP_HASH160,
     OPPushDataGeneric(lambda x: x == 20),
