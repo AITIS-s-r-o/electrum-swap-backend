@@ -178,7 +178,7 @@ def _wex_check_normal_redeem_script(
     if not match_script_against_template(redeem_script, WEX_WITNESS_TEMPLATE_SWAP_OLD):
         raise Exception("fswap check failed: scriptcode does not match template")
 
-    if script_to_p2wsh(redeem_script.hex()) != lockup_address:
+    if script_to_p2wsh(redeem_script) != lockup_address:
         raise Exception("fswap check failed: inconsistent scriptcode and address")
 
     if ripemd(payment_hash) != parsed_script[1][1]:
