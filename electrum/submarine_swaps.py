@@ -1466,7 +1466,7 @@ class SwapManager(Logger):
 
 
     # Client method for requesting forward swap using old flow.
-    async def wex_forward_swap(
+    async def wex_normal_swap(
             self,
             *,
             transport: 'SwapServerTransport',

@@ -2275,7 +2275,7 @@ class Commands(Logger):
 
             self.logger.info(f"wex_forward_swap; About to get forward swap data.")
 
-            swapData = await wallet.lnworker.swap_manager.wex_forward_swap(
+            swapData = await wallet.lnworker.swap_manager.wex_normal_swap(
                 transport=transport,
                 invoice=invoice,
                 refundPublicKey=refundPublicKey,
