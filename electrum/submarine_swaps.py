@@ -1515,14 +1515,14 @@ class SwapManager(Logger):
             onchain_amount = data['expectedAmount']
             assert isinstance(onchain_amount, int), type(onchain_amount)
 
-            # check that onchain_amount is not more than what we estimated
+            # Check that onchain_amount is not more than what we estimated.
             if onchain_amount > expected_onchain_amount_sat:
                 raise Exception(f"fswap check failed: onchain_amount is more than what we estimated: "
                                 f"{onchain_amount} > {expected_onchain_amount_sat}")
             locktime = data['timeoutBlockHeight']
             assert isinstance(locktime, int), type(locktime)
 
-            # verify that they are not locking up funds for more than a day
+            # Verify that they are not locking up funds for more than a day.
             if locktime - self.network.get_local_height() >= 144:
                 raise Exception("fswap check failed: locktime too far in future")
 
