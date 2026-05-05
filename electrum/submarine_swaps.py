@@ -159,7 +159,7 @@ def _wex_check_normal_redeem_script(
     *,
     redeem_script: bytes,
     lockup_address: str,
-    payment_hash: str,
+    payment_hash: bytes,
     locktime: int,
     refund_pubkey: bytes
 ) -> None:
@@ -167,7 +167,7 @@ def _wex_check_normal_redeem_script(
 
     arg:redeem_script:bytes:Redeem script received from the swap provider to check.
     arg:lockup_address:str:Lockup address that the swap provider gave us. We check that the redeem script corresponds to this lockup address.
-    arg:payment_hash:str:Hash of the preimage in hex. We check that this payment hash is included in the redeem script. The hash has already been verified to be consistent with
+    arg:payment_hash:bytes:Hash of the preimage. We check that this payment hash is included in the redeem script. The hash has already been verified to be consistent with
         the lightning invoice.
     arg:locktime:int:Locktime for the swap. We check that this locktime is included in the redeem script. We have already verified that this locktime is sufficiently far in the
         future
@@ -1542,11 +1542,12 @@ class SwapManager(Logger):
 
             redeem_script = bytes.fromhex(redeem_script_hex)
             refund_pk = bytes.fromhex(refundPublicKey)
+            hash_bytes = bytes.fromhex(payment_hash)
 
             _wex_check_normal_redeem_script(
                 redeem_script=redeem_script,
                 lockup_address=lockup_address,
-                payment_hash=payment_hash,
+                payment_hash=hash_bytes,
                 locktime=locktime,
                 refund_pubkey=refund_pk
             )
