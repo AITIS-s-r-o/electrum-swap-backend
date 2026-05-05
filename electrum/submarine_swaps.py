@@ -797,8 +797,6 @@ class SwapManager(Logger):
             payment_hash: bytes,
             lockup_address: str,
     ) -> Tuple[SwapData]:
-        if payment_hash.hex() in self._swaps:
-            raise Exception("payment_hash already in use")
         invoice_amount_sat = lightning_amount_sat
         
         swap = SwapData(
