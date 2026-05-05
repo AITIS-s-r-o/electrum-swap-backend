@@ -190,6 +190,17 @@ def _wex_check_normal_redeem_script(
     if locktime != int.from_bytes(parsed_script[6][1], byteorder='little'):
         raise Exception("fswap check failed: inconsistent locktime and script")
 
+    # Let's just rebuild the full script from scratch.
+    server_pubkey = parsed_script[4][1]
+    if redeem_script != _wex_construct_swap_scriptcode(
+        payment_hash=payment_hash,
+        locktime=locktime,
+        server_pubkey=server_pubkey,
+        client_pubkey=refund_pubkey,
+    ):
+        raise Exception("fswap failed to rebuild swap script from scratch")
+
+
 def _construct_swap_scriptcode(
     payment_hash: bytes,
     locktime: int,
@@ -203,6 +214,22 @@ def _construct_swap_scriptcode(
     return construct_script(
         WITNESS_TEMPLATE_SWAP,
         values={1: 32, 5: ripemd(payment_hash), 7: claim_pubkey, 10: locktime, 13: refund_pubkey}
+    )
+
+# Copy of _construct_swap_scriptcode with changes for WEX.
+def _wex_construct_swap_scriptcode(
+    payment_hash: bytes,
+    locktime: int,
+    server_pubkey: bytes,
+    client_pubkey: bytes,
+) -> bytes:
+    assert isinstance(payment_hash, bytes) and len(payment_hash) == 32
+    assert isinstance(locktime, int) and (0 <= locktime <= bitcoin.NLOCKTIME_BLOCKHEIGHT_MAX)
+    assert isinstance(server_pubkey, bytes) and len(server_pubkey) == 33
+    assert isinstance(client_pubkey, bytes) and len(client_pubkey) == 33
+    return construct_script(
+        WEX_WITNESS_TEMPLATE_SWAP_OLD,
+        values={1: 32, 5: ripemd(payment_hash), 7: client_pubkey, 10: locktime, 13: server_pubkey}
     )
 
 
