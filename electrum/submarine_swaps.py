@@ -789,6 +789,7 @@ class SwapManager(Logger):
         return swap, invoice, prepay_invoice
 
     # Creates SwapData for a forward swap.
+    # This is a copy of the method above with modifications for WEX.
     def wex_add_normal_swap(
             self, *,
             redeem_script: bytes,
