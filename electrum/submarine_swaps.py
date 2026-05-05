@@ -104,15 +104,15 @@ WITNESS_TEMPLATE_SWAP = [
 # See https://github.com/spesmilo/electrum/blob/fd10ae3a3b0c52571755d251b3e087c7aa950050/electrum/submarine_swaps.py#L45
 WEX_WITNESS_TEMPLATE_SWAP_OLD = [
     opcodes.OP_HASH160,
-    OPPushDataGeneric(lambda x: x == 20),
+    OPPushDataGeneric(lambda x: x == 20),  # idx 1. payment_hash
     opcodes.OP_EQUAL,
     opcodes.OP_IF,
-    OPPushDataPubkey,
+    OPPushDataPubkey,                      # idx 4. server_pubkey
     opcodes.OP_ELSE,
-    OPPushDataGeneric(None),
+    OPPushDataGeneric(None),               # idx 6. locktime
     opcodes.OP_CHECKLOCKTIMEVERIFY,
     opcodes.OP_DROP,
-    OPPushDataPubkey,
+    OPPushDataPubkey,                      # idx 9. client_pubkey
     opcodes.OP_ENDIF,
     opcodes.OP_CHECKSIG
 ]
@@ -229,7 +229,7 @@ def _wex_construct_swap_scriptcode(
     assert isinstance(client_pubkey, bytes) and len(client_pubkey) == 33
     return construct_script(
         WEX_WITNESS_TEMPLATE_SWAP_OLD,
-        values={1: 32, 5: ripemd(payment_hash), 7: client_pubkey, 10: locktime, 13: server_pubkey}
+        values={1: ripemd(payment_hash), 4: server_pubkey, 6: locktime, 9: client_pubkey}
     )
 
 
