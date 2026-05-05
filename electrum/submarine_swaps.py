@@ -1448,7 +1448,7 @@ class SwapManager(Logger):
         """
 
         parsed_script = [x for x in script_GetOp(redeem_script)]
-        if not match_script_against_template(redeem_script, WEX_WITNESS_TEMPLATE_SWAP_OLD ):
+        if not match_script_against_template(redeem_script, WEX_WITNESS_TEMPLATE_SWAP_OLD):
             raise Exception("fswap check failed: scriptcode does not match template")
 
         if script_to_p2wsh(redeem_script.hex()) != lockup_address:
