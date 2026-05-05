@@ -155,7 +155,7 @@ def _check_swap_scriptcode(
         raise Exception("failed to rebuild swap script from scratch")
 
 # Checks that the redeem script, which was received from the swap provider, for a normal swap is correctly formed, and consistent with the other parameters.
-def wex_check_normal_redeem_script(*, redeem_script, lockup_address, payment_hash, locktime, refund_pubkey):
+def _wex_check_normal_redeem_script(*, redeem_script, lockup_address, payment_hash, locktime, refund_pubkey):
     """Checks the redeem script received from the swap provider.
 
     arg:redeem_script:bytes:Redeem script received from the swap provider to check.
@@ -1535,7 +1535,7 @@ class SwapManager(Logger):
 
             redeem_script = bytes.fromhex(redeem_script_hex)
 
-            wex_check_normal_redeem_script(
+            _wex_check_normal_redeem_script(
                 redeem_script=redeem_script,
                 lockup_address=lockup_address,
                 payment_hash=payment_hash,
