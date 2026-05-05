@@ -1434,7 +1434,19 @@ class SwapManager(Logger):
         )
         return swap, invoice, fee_invoice
 
+    # Checks that the redeem script, which was received from the swap provider, for a normal swap is correctly formed, and consistent with the other parameters.
     def wex_check_normal_redeem_script(self, *, redeem_script, lockup_address, payment_hash, locktime, refund_pubkey):
+        """Checks the redeem script received from the swap provider.
+
+        arg:redeem_script:bytes:Redeem script received from the swap provider to check.
+        arg:lockup_address:str:Lockup address that the swap provider gave us. We check that the redeem script corresponds to this lockup address.
+        arg:payment_hash:str:Hash of the preimage in hex. We check that this payment hash is included in the redeem script. The hash has already been verified to be consistent with
+            the lightning invoice.
+        arg:locktime:int:Locktime for the swap. We check that this locktime is included in the redeem script. We have already verified that this locktime is sufficiently far in the
+            future
+        arg:refund_pubkey:str:Public key in hex that the server should use in the redeem script to allow the user to claim the on-chain output.
+        """
+
         parsed_script = [x for x in script_GetOp(redeem_script)]
         if not match_script_against_template(redeem_script, WEX_WITNESS_TEMPLATE_SWAP_OLD ):
             raise Exception("fswap check failed: scriptcode does not match template")
@@ -1465,6 +1477,9 @@ class SwapManager(Logger):
     ) -> Optional[SwapData]:
         """Send on on-chain, receive Lightning using the old flow.
 
+        arg:str:invoice:Lightning invoice from the client that the swap provider should pay.
+        arg:str:refundPublicKey:Public key of the refund in hex format.
+        arg:int:expected_onchain_amount_sat:Expected amount of on-chain satoshis to be sent on-chain by the client.
         arg:provider_pk:str:Selected swap provider's public key in hex.
 
         - User generates an LN invoice with RHASH, and knows preimage.
