@@ -1520,7 +1520,7 @@ class SwapManager(Logger):
 
             redeem_script = bytes.fromhex(redeem_script_hex)
 
-            claim_pubkey, _ = self.wex_check_normal_redeem_script(
+            _, _ = self.wex_check_normal_redeem_script(
                 redeem_script=redeem_script,
                 lockup_address=lockup_address,
                 payment_hash=payment_hash,
