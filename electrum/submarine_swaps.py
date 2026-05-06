@@ -99,6 +99,21 @@ WITNESS_TEMPLATE_SWAP = [
     opcodes.OP_CHECKSIG
 ]
 
+WITNESS_TEMPLATE_SWAP_V1 = [
+    opcodes.OP_HASH160,
+    OPPushDataGeneric(lambda x: x == 20),  # idx 1. payment_hash
+    opcodes.OP_EQUAL,
+    opcodes.OP_IF,
+    OPPushDataPubkey,                      # idx 4. server_pubkey
+    opcodes.OP_ELSE,
+    OPPushDataGeneric(None),               # idx 6. locktime
+    opcodes.OP_CHECKLOCKTIMEVERIFY,
+    opcodes.OP_DROP,
+    OPPushDataPubkey,                      # idx 9. client_pubkey
+    opcodes.OP_ENDIF,
+    opcodes.OP_CHECKSIG
+]
+
 CAP_FORWARD_V1 = "forwardv1"               # supports forward swaps with v1 flow
 
 
@@ -150,6 +165,21 @@ def _construct_swap_scriptcode(
     return construct_script(
         WITNESS_TEMPLATE_SWAP,
         values={1: 32, 5: ripemd(payment_hash), 7: claim_pubkey, 10: locktime, 13: refund_pubkey}
+    )
+
+def _construct_swap_scriptcode_v1(
+    payment_hash: bytes,
+    locktime: int,
+    server_pubkey: bytes,
+    client_pubkey: bytes,
+) -> bytes:
+    assert isinstance(payment_hash, bytes) and len(payment_hash) == 32
+    assert isinstance(locktime, int) and (0 <= locktime <= bitcoin.NLOCKTIME_BLOCKHEIGHT_MAX)
+    assert isinstance(server_pubkey, bytes) and len(server_pubkey) == 33
+    assert isinstance(client_pubkey, bytes) and len(client_pubkey) == 33
+    return construct_script(
+        WITNESS_TEMPLATE_SWAP_V1,
+        values={1: ripemd(payment_hash), 4: server_pubkey, 6: locktime, 9: client_pubkey}
     )
 
 
@@ -753,6 +783,10 @@ class SwapManager(Logger):
         self.add_lnwatcher_callback(swap)
         return swap, invoice, prepay_invoice
 
+    # v2
+    # - user requests swap
+    # - server creates preimage, sends RHASH to user
+    # - user creates hold invoice, sends it to server
     def create_reverse_swap(self, *, lightning_amount_sat: int, their_pubkey: bytes) -> SwapData:
         """ server method. """
         assert lightning_amount_sat is not None
@@ -783,6 +817,47 @@ class SwapManager(Logger):
             lightning_amount_sat=lightning_amount_sat)
         return swap
 
+    # v1
+    # - User generates an LN invoice with RHASH, and knows preimage.
+    # - User creates on-chain output locked to RHASH.
+    # - Server pays LN invoice. User reveals preimage.
+    # - Server spends the on-chain output using preimage.
+    def create_reverse_swap_v1(self, *, invoice: Invoice, refund_pubkey: bytes) -> SwapData:
+        """ server method. """
+
+        locktime = self.network.get_local_height() + LOCKTIME_DELTA_REFUND
+        if self.network.blockchain().is_tip_stale():
+            raise Exception("our blockchain tip is stale")
+        lnaddr = lndecode(invoice)
+        payment_hash = lnaddr.paymenthash
+        lightning_amount_sat = int(lnaddr.get_amount_sat()) # should return int
+
+        privkey = os.urandom(32)
+        our_pubkey = ECPrivkey(privkey).get_public_key_bytes(compressed=True)
+
+        # TODO
+        onchain_amount_sat = self._get_send_amount(lightning_amount_sat, is_reverse=False)
+
+        if not onchain_amount_sat:
+            raise Exception("no onchain amount")
+
+        redeem_script = _construct_swap_scriptcode_v1(
+            payment_hash=payment_hash,
+            locktime=locktime,
+            refund_pubkey=refund_pubkey,
+            claim_pubkey=our_pubkey,
+        )
+        swap = self.add_reverse_swap(
+            redeem_script=redeem_script,
+            locktime=locktime,
+            privkey=privkey,
+            preimage=None,
+            payment_hash=payment_hash,
+            prepay_hash=None,
+            onchain_amount_sat=onchain_amount_sat,
+            lightning_amount_sat=lightning_amount_sat)
+        return swap
+
     def add_reverse_swap(
         self,
         *,
@@ -791,14 +866,17 @@ class SwapManager(Logger):
         privkey: bytes,
         lightning_amount_sat: int,
         onchain_amount_sat: int,
-        preimage: bytes,
+        preimage: Optional[bytes] = None,
         payment_hash: bytes,
         prepay_hash: Optional[bytes] = None,
         claim_to_output: Optional[TxOutput] = None,
     ) -> SwapData:
         if payment_hash.hex() in self._swaps:
             raise Exception("payment_hash already in use")
-        assert sha256(preimage) == payment_hash
+
+        if preimage is not None:
+            assert sha256(preimage) == payment_hash
+
         lockup_address = script_to_p2wsh(redeem_script)
         if claim_to_output is not None:
             # the claim_to_output value needs to be lower than the funding utxo value, otherwise
@@ -1418,6 +1496,7 @@ class SwapManager(Logger):
             return None
         return max_swap_size
 
+    # v2.
     def server_create_normal_swap(self, request):
         # normal for client, reverse for server
         #request = await r.json()
@@ -1440,12 +1519,11 @@ class SwapManager(Logger):
         return response
 
     def server_create_swap(self, request):
-        # reverse for client, forward for server
-        # requesting a normal swap (old protocol) will raise an exception
         #request = await r.json()
         req_type = request['type']
         assert request['pairId'] == 'BTC/BTC'
         if req_type == 'reversesubmarine':
+            # reverse for client, forward for server
             lightning_amount_sat=request['invoiceAmount']
             payment_hash=bytes.fromhex(request['preimageHash'])
             their_pubkey=bytes.fromhex(request['claimPublicKey'])
@@ -1466,7 +1544,23 @@ class SwapManager(Logger):
                 "onchainAmount": swap.onchain_amount,
             }
         elif req_type == 'submarine':
-            raise Exception('Deprecated API. Please upgrade your version of Electrum')
+            # client is doing a normal swap (old protocol)
+
+            their_invoice = request['invoice']
+            refund_pubkey = bytes.fromhex(request['refundPublicKey'])
+            assert len(refund_pubkey) == 33
+            swap, payment_hash, invoice, prepay_invoice = self.create_reverse_swap_v1(
+                invoice=their_invoice,
+                refund_pubkey=refund_pubkey
+            )
+            response = {
+                "id": payment_hash.hex(),
+                "acceptZeroConf": False,
+                "expectedAmount": swap.onchain_amount,
+                "timeoutBlockHeight": swap.locktime,
+                "address": swap.lockup_address,
+                "redeemScript": swap.redeem_script.hex()
+            }
         else:
             raise Exception('unsupported request type:' + req_type)
         return response
@@ -1988,8 +2082,10 @@ class NostrTransport(SwapServerTransport):
                 if method == 'addswapinvoice':  # client-forward-swap phase2
                     r = self.sm.server_add_swap_invoice(request)
                 elif method == 'createswap':  # client-reverse-swap
+                    # v1 (both normal and reverse swaps)
                     r = self.sm.server_create_swap(request)
                 elif method == 'createnormalswap':  # client-forward-swap phase1
+                    # v2
                     r = self.sm.server_create_normal_swap(request)
                 else:
                     raise Exception(method)
