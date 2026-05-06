@@ -1549,12 +1549,12 @@ class SwapManager(Logger):
             their_invoice = request['invoice']
             refund_pubkey = bytes.fromhex(request['refundPublicKey'])
             assert len(refund_pubkey) == 33
-            swap, payment_hash, invoice, prepay_invoice = self.create_reverse_swap_v1(
+            swap = self.create_reverse_swap_v1(
                 invoice=their_invoice,
                 refund_pubkey=refund_pubkey
             )
             response = {
-                "id": payment_hash.hex(),
+                "id": swap.payment_hash.hex(),
                 "acceptZeroConf": False,
                 "expectedAmount": swap.onchain_amount,
                 "timeoutBlockHeight": swap.locktime,
