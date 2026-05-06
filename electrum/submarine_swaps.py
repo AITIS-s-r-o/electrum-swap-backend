@@ -1544,7 +1544,7 @@ class SwapManager(Logger):
         try:
             payment_hash = data['id']
             assert isinstance(payment_hash, str), type(payment_hash)
-            assert payment_hash == rhash.hex(), "swapserver returned inconsistent payment hash"
+            assert payment_hash == rhash, "swapserver returned inconsistent payment hash"
 
             onchain_amount = data['expectedAmount']
             assert isinstance(onchain_amount, int), type(onchain_amount)
@@ -1581,6 +1581,9 @@ class SwapManager(Logger):
 
         except Exception as e:
             self.logger.error(f"failed to parse response from swapserver for createswap: {e!r}")
+            self.logger.error(f"- request: {request_data}")
+            self.logger.error(f"- lninvoice: {ln_invoice}")
+            self.logger.error(f"- response: {data}")
             raise SwapServerError("failed to parse response from swapserver for createswap") from e
 
         del data  # parsing done
