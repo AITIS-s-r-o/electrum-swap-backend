@@ -869,6 +869,7 @@ class SwapManager(Logger):
             prepay_hash = None,
             lockup_address = lockup_address,
             onchain_amount = onchain_amount_sat,
+            claim_to_output=None,
             lightning_amount = lightning_amount_sat,
             is_reverse = False,
             is_redeemed = False,
@@ -1526,7 +1527,7 @@ class SwapManager(Logger):
         assert self.lnwatcher
 
         ln_invoice = Invoice.from_bech32(invoice)
-        lightning_amount_sat = ln_invoice.amount_msat / 1000
+        lightning_amount_sat = int(ln_invoice.amount_msat / 1000)
         rhash = ln_invoice.rhash
 
         self._sanity_check_swap_costs(
@@ -1544,7 +1545,7 @@ class SwapManager(Logger):
         try:
             payment_hash = data['id']
             assert isinstance(payment_hash, str), type(payment_hash)
-            assert payment_hash == rhash.hex(), "swapserver returned inconsistent payment hash"
+            assert payment_hash == rhash, "swapserver returned inconsistent payment hash"
 
             onchain_amount = data['expectedAmount']
             assert isinstance(onchain_amount, int), type(onchain_amount)
@@ -1581,6 +1582,9 @@ class SwapManager(Logger):
 
         except Exception as e:
             self.logger.error(f"failed to parse response from swapserver for createswap: {e!r}")
+            self.logger.error(f"- request: {request_data}")
+            self.logger.error(f"- ln_invoice: {ln_invoice}")
+            self.logger.error(f"- response: {data}")
             raise SwapServerError("failed to parse response from swapserver for createswap") from e
 
         del data  # parsing done
