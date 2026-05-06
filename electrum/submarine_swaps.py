@@ -869,6 +869,7 @@ class SwapManager(Logger):
             prepay_hash = None,
             lockup_address = lockup_address,
             onchain_amount = onchain_amount_sat,
+            claim_to_output=None,
             lightning_amount = lightning_amount_sat,
             is_reverse = False,
             is_redeemed = False,
