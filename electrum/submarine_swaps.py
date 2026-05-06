@@ -1582,7 +1582,7 @@ class SwapManager(Logger):
         except Exception as e:
             self.logger.error(f"failed to parse response from swapserver for createswap: {e!r}")
             self.logger.error(f"- request: {request_data}")
-            self.logger.error(f"- lninvoice: {ln_invoice}")
+            self.logger.error(f"- ln_invoice: {ln_invoice}")
             self.logger.error(f"- response: {data}")
             raise SwapServerError("failed to parse response from swapserver for createswap") from e
 
