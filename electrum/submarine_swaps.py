@@ -844,8 +844,8 @@ class SwapManager(Logger):
         redeem_script = _construct_swap_scriptcode_v1(
             payment_hash=payment_hash,
             locktime=locktime,
-            refund_pubkey=refund_pubkey,
-            claim_pubkey=our_pubkey,
+            server_pubkey=our_pubkey,
+            client_pubkey=refund_pubkey,
         )
         swap = self.add_reverse_swap(
             redeem_script=redeem_script,
