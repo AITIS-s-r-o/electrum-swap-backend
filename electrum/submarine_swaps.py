@@ -931,9 +931,12 @@ class SwapManager(Logger):
             assert swap.spending_txid is None
             # check their_pubkey by recalculating redeem_script
             our_pubkey = ECPrivkey(swap.privkey).get_public_key_bytes(compressed=True)
-            redeem_script = _construct_swap_scriptcode(
-                payment_hash=payment_hash, locktime=swap.locktime, refund_pubkey=their_pubkey, claim_pubkey=our_pubkey,
+            redeem_script = _construct_swap_scriptcode_v1(
+                payment_hash=payment_hash, locktime=swap.locktime, server_pubkey=our_pubkey, client_pubkey=their_pubkey,
             )
+            self.logger.info(f'server_add_swap_invoice: redeem scripts:')
+            self.logger.info(f'server_add_swap_invoice: - {redeem_script}')
+            self.logger.info(f'server_add_swap_invoice: - {swap.redeem_script}')
             assert swap.redeem_script == redeem_script
             assert key not in self.invoices_to_pay
             self.invoices_to_pay[key] = 0
