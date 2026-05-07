@@ -1813,6 +1813,7 @@ class LNWallet(Logger):
             channels: Optional[Sequence[Channel]] = None,
             budget: Optional[PaymentFeeBudget] = None,
     ) -> Tuple[bool, List[HtlcLog]]:
+        self.logger.info(f"pay_invoice(invoice={invoice}, amount_msat={amount_msat})")
         bolt11 = invoice.lightning_invoice
         lnaddr = self._check_bolt11_invoice(bolt11, amount_msat=amount_msat)
         min_final_cltv_delta = lnaddr.get_min_final_cltv_delta()
