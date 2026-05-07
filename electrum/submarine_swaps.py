@@ -1548,6 +1548,7 @@ class SwapManager(Logger):
             }
         elif req_type == 'submarine':
             # client is doing a normal swap (old protocol)
+            self.logger.debug(f'submarine v1 request')
 
             their_invoice = request['invoice']
             refund_pubkey = bytes.fromhex(request['refundPublicKey'])
@@ -1556,6 +1557,10 @@ class SwapManager(Logger):
                 invoice=their_invoice,
                 refund_pubkey=refund_pubkey
             )
+
+            self.logger.debug(f'register the invoice')
+            self.server_add_swap_invoice(request)
+
             response = {
                 "id": swap.payment_hash.hex(),
                 "acceptZeroConf": False,
