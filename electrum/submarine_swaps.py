@@ -825,7 +825,8 @@ class SwapManager(Logger):
     def create_reverse_swap_v1(self, *, invoice: Invoice, refund_pubkey: bytes) -> SwapData:
         """ server method. """
 
-        locktime = self.network.get_local_height() + LOCKTIME_DELTA_REFUND
+        height = self.network.get_local_height()
+        locktime = height + LOCKTIME_DELTA_REFUND
         if self.network.blockchain().is_tip_stale():
             raise Exception("our blockchain tip is stale")
         lnaddr = lndecode(invoice)
@@ -841,6 +842,8 @@ class SwapManager(Logger):
         if not onchain_amount_sat:
             raise Exception("no onchain amount")
 
+        self.logger.info(f'client requested forward swap; lightning_amount_sat={lightning_amount_sat}, '
+                         f'onchain_amount_sat={onchain_amount_sat}, height={height}, locktime={locktime}')
         redeem_script = _construct_swap_scriptcode_v1(
             payment_hash=payment_hash,
             locktime=locktime,
