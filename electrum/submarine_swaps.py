@@ -1527,7 +1527,7 @@ class SwapManager(Logger):
         assert self.lnwatcher
 
         ln_invoice = Invoice.from_bech32(invoice)
-        lightning_amount_sat = int(ln_invoice.amount_msat / 1000)
+        lightning_amount_sat = math.ceil(ln_invoice.amount_msat / 1000)
         rhash = ln_invoice.rhash
 
         self._sanity_check_swap_costs(
