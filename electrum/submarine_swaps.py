@@ -783,10 +783,6 @@ class SwapManager(Logger):
         self.add_lnwatcher_callback(swap)
         return swap, invoice, prepay_invoice
 
-    # v2
-    # - user requests swap
-    # - server creates preimage, sends RHASH to user
-    # - user creates hold invoice, sends it to server
     def create_reverse_swap(self, *, lightning_amount_sat: int, their_pubkey: bytes) -> SwapData:
         """ server method. """
         assert lightning_amount_sat is not None
@@ -817,13 +813,14 @@ class SwapManager(Logger):
             lightning_amount_sat=lightning_amount_sat)
         return swap
 
-    # v1
-    # - User generates an LN invoice with RHASH, and knows preimage.
-    # - User creates on-chain output locked to RHASH.
-    # - Server pays LN invoice. User reveals preimage.
-    # - Server spends the on-chain output using preimage.
     def create_reverse_swap_v1(self, *, invoice: Invoice, refund_pubkey: bytes) -> SwapData:
-        """ server method. """
+        """ server method for v1 workflow:
+
+        - User generates an LN invoice with RHASH, and knows preimage.
+        - User creates on-chain output locked to RHASH.
+        - Server pays LN invoice. User reveals preimage.
+        - Server spends the on-chain output using preimage.
+        """
 
         height = self.network.get_local_height()
         locktime = height + LOCKTIME_DELTA_REFUND
@@ -835,8 +832,6 @@ class SwapManager(Logger):
 
         privkey = os.urandom(32)
         our_pubkey = ECPrivkey(privkey).get_public_key_bytes(compressed=True)
-
-        # TODO
         onchain_amount_sat = self._get_send_amount(lightning_amount_sat, is_reverse=False)
 
         if not onchain_amount_sat:
