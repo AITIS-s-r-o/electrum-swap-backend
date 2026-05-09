@@ -1499,7 +1499,6 @@ class SwapManager(Logger):
             return None
         return max_swap_size
 
-    # v2.
     def server_create_normal_swap(self, request):
         # normal for client, reverse for server
         #request = await r.json()
@@ -2089,11 +2088,9 @@ class NostrTransport(SwapServerTransport):
                 self.logger.info(f'handle_request: id={event_id} {method} {request}')
                 if method == 'addswapinvoice':  # client-forward-swap phase2
                     r = self.sm.server_add_swap_invoice(request)
-                elif method == 'createswap':  # client-reverse-swap
-                    # v1 (both normal and reverse swaps)
+                elif method == 'createswap':  # v1: client-forward-swap & client-reverse-swap
                     r = self.sm.server_create_swap(request)
                 elif method == 'createnormalswap':  # client-forward-swap phase1
-                    # v2
                     r = self.sm.server_create_normal_swap(request)
                 else:
                     raise Exception(method)
