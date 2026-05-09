@@ -917,6 +917,34 @@ class SwapManager(Logger):
         with self.swaps_lock:
             assert key in self._swaps
             swap = self._swaps[key]
+            assert swap.lightning_amount == int(invoice.get_amount_sat())
+            assert swap.is_reverse is True
+            # check that we have the preimage
+            assert sha256(swap.preimage) == payment_hash
+            assert swap.spending_txid is None
+            # check their_pubkey by recalculating redeem_script
+            our_pubkey = ECPrivkey(swap.privkey).get_public_key_bytes(compressed=True)
+            redeem_script = _construct_swap_scriptcode(
+                payment_hash=payment_hash, locktime=swap.locktime, refund_pubkey=their_pubkey, claim_pubkey=our_pubkey,
+            )
+            assert swap.redeem_script == redeem_script
+            assert key not in self.invoices_to_pay
+            self.invoices_to_pay[key] = 0
+            assert self.wallet.get_invoice(invoice.get_id()) is None
+            self.wallet.save_invoice(invoice)
+        return {}
+
+    def server_add_swap_invoice_v1(self, invoice: str, refundPublicKey: str) -> dict:
+        """ server method.
+        (client-forward-swap v1)
+        """
+        invoice = Invoice.from_bech32(invoice)
+        key = invoice.rhash
+        payment_hash = bytes.fromhex(key)
+        their_pubkey = bytes.fromhex(refundPublicKey)
+        with self.swaps_lock:
+            assert key in self._swaps
+            swap = self._swaps[key]
             self.logger.info(f'server_add_swap_invoice: found swap is: {swap}')
 
             assert swap.lightning_amount == int(invoice.get_amount_sat())
@@ -1547,8 +1575,6 @@ class SwapManager(Logger):
             }
         elif req_type == 'submarine':
             # client is doing a normal swap (old protocol)
-            self.logger.debug(f'submarine v1 request')
-
             their_invoice = request['invoice']
             refund_pubkey = bytes.fromhex(request['refundPublicKey'])
             assert len(refund_pubkey) == 33
@@ -1557,8 +1583,7 @@ class SwapManager(Logger):
                 refund_pubkey=refund_pubkey
             )
 
-            self.logger.debug(f'register the invoice')
-            self.server_add_swap_invoice(request)
+            self.server_add_swap_invoice_v1(request['invoice'], request['refundPublicKey'])
 
             response = {
                 "id": swap.payment_hash.hex(),
