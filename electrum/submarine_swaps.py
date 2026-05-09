@@ -992,8 +992,6 @@ class SwapManager(Logger):
 
             assert swap.lightning_amount == int(invoice.get_amount_sat())
             assert swap.is_reverse is True
-            # check that we have the preimage
-            # assert sha256(swap.preimage) == payment_hash
             assert swap.spending_txid is None
             # check their_pubkey by recalculating redeem_script
             our_pubkey = ECPrivkey(swap.privkey).get_public_key_bytes(compressed=True)
