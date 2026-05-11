@@ -850,9 +850,7 @@ class SwapManager(Logger):
             redeem_script=redeem_script,
             locktime=locktime,
             privkey=privkey,
-            preimage=None,
             payment_hash=payment_hash,
-            prepay_hash=None,
             onchain_amount_sat=onchain_amount_sat,
             lightning_amount_sat=lightning_amount_sat)
         return swap
@@ -911,39 +909,27 @@ class SwapManager(Logger):
         privkey: bytes,
         lightning_amount_sat: int,
         onchain_amount_sat: int,
-        preimage: Optional[bytes] = None,
-        payment_hash: bytes,
-        prepay_hash: Optional[bytes] = None,
-        claim_to_output: Optional[TxOutput] = None,
+        payment_hash: bytes
     ) -> SwapData:
         if payment_hash.hex() in self._swaps:
             raise Exception("payment_hash already in use")
 
         lockup_address = script_to_p2wsh(redeem_script)
-        if claim_to_output is not None:
-            # the claim_to_output value needs to be lower than the funding utxo value, otherwise
-            # there are no funds left for the fee of the claim tx
-            assert claim_to_output.value < onchain_amount_sat, f"{claim_to_output=} >= {onchain_amount_sat=}"
-            claim_to_output = (claim_to_output.address, claim_to_output.value)
         swap = SwapData(
             redeem_script=redeem_script,
             locktime=locktime,
             privkey=privkey,
-            preimage=preimage,
-            prepay_hash=prepay_hash,
+            preimage=None,
+            prepay_hash=None,
             lockup_address=lockup_address,
             onchain_amount=onchain_amount_sat,
-            claim_to_output=claim_to_output,
+            claim_to_output=None,
             lightning_amount=lightning_amount_sat,
             is_reverse=True,
             is_redeemed=False,
             funding_txid=None,
             spending_txid=None,
         )
-        if prepay_hash:
-            if prepay_hash in self._prepayments:
-                raise Exception("prepay_hash already in use")
-            self._prepayments[prepay_hash] = payment_hash
         swap._payment_hash = payment_hash
         self._add_or_reindex_swap(swap, is_new=True)
         self.add_lnwatcher_callback(swap)
