@@ -819,7 +819,7 @@ class SwapManager(Logger):
 
         - User generates an LN invoice with RHASH, and knows preimage.
         - User creates on-chain output locked to RHASH.
-        - Server pays LN invoice. User reveals preimage.
+        - Server pays LN invoice. By completing payment, user reveals preimage.
         - Server spends the on-chain output using preimage.
         """
 
