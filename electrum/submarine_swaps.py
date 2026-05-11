@@ -99,6 +99,7 @@ WITNESS_TEMPLATE_SWAP = [
     opcodes.OP_CHECKSIG
 ]
 
+# Witness-script for old forward swap flow.
 WITNESS_TEMPLATE_SWAP_V1 = [
     opcodes.OP_HASH160,
     OPPushDataGeneric(lambda x: x == 20),  # idx 1. payment_hash
