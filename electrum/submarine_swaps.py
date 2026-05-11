@@ -79,7 +79,7 @@ assert MAX_LOCKTIME_DELTA < MIN_FINAL_CLTV_DELTA_FOR_CLIENT
 # different length which would still allow for claiming the onchain
 # coins but the invoice couldn't be settled
 
-# Unified witness-script for all swaps.  Historically with Boltz-backend, this was the reverse-swap script.
+# Witness-script for all reverse swaps and the new normal swap following the new flow. Historically with Boltz-backend, this was the reverse-swap script.
 WITNESS_TEMPLATE_SWAP = [
     opcodes.OP_SIZE,
     OPPushDataGeneric(None),               # idx 1. length of preimage
