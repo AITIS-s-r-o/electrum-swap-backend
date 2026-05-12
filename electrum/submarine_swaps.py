@@ -838,6 +838,12 @@ class SwapManager(Logger):
         if not onchain_amount_sat:
             raise Exception("no onchain amount")
 
+        success, _ = self.lnworker.pay_invoice(invoice, probe_only=True)
+        self.logger.debug(f'create_reverse_swap_v1: Can route invoice? {success}')
+
+        if not success:
+            raise Exception("no LN route to pay the invoice")
+
         self.logger.info(f'client requested forward swap; lightning_amount_sat={lightning_amount_sat}, '
                          f'onchain_amount_sat={onchain_amount_sat}, height={height}, locktime={locktime}')
         redeem_script = _construct_swap_scriptcode_v1(
@@ -1606,6 +1612,7 @@ class SwapManager(Logger):
             their_invoice = request['invoice']
             refund_pubkey = bytes.fromhex(request['refundPublicKey'])
             assert len(refund_pubkey) == 33
+
             swap = self.create_reverse_swap_v1(
                 invoice=their_invoice,
                 refund_pubkey=refund_pubkey
