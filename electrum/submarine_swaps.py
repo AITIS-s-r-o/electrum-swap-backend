@@ -838,7 +838,7 @@ class SwapManager(Logger):
         if not onchain_amount_sat:
             raise Exception("no onchain amount")
 
-        success, _ = self.lnworker.pay_invoice(invoice, probe_only=True)
+        success, log = self.lnworker.pay_invoice(invoice, probe_only=True)
         self.logger.debug(f'create_reverse_swap_v1: Can route invoice? {success}')
 
         if not success:
