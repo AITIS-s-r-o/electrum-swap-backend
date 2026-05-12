@@ -1978,11 +1978,13 @@ class LNWallet(Logger):
                             probe_only=probe_only,
                         )
 
+                        self.logger.debug(f'lnworker.pay_to_node: create_routes_for_payment called')
                         can_route = False
 
                         # 2. send htlcs
                         async for sent_htlc_info, cltv_delta, trampoline_onion in routes:
                             if probe_only:
+                                self.logger.debug(f'lnworker.pay_to_node: Route={sent_htlc_info}')
                                 can_route = True
                                 continue
 
@@ -1995,6 +1997,7 @@ class LNWallet(Logger):
                             )
 
                         if probe_only:
+                            self.logger.debug(f'lnworker.pay_to_node: -> can_route={can_route}')
                             return can_route
                     # invoice_status is triggered in self.set_invoice_status when it actually changes.
                     # It is also triggered here to update progress for a lightning payment in the GUI
