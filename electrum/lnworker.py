@@ -1976,7 +1976,6 @@ class LNWallet(Logger):
                             fwd_trampoline_onion=fwd_trampoline_onion,
                             channels=channels,
                             budget=budget._replace(fee_msat=remaining_fee_budget_msat),
-                            probe_only=probe_only,
                         )
 
                         self.logger.debug(f'lnworker.pay_to_node: create_routes_for_payment called')
