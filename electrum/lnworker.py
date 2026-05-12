@@ -1965,6 +1965,7 @@ class LNWallet(Logger):
                     # taken until the htlcs are added to the channel so the next splitting attempt
                     # acts on a correct channel balance.
                     async with self._channel_sending_capacity_lock:
+                        self.logger.debug(f'lnworker.pay_to_node: 1. create a set of routes for remaining amount.')
                         # 1. create a set of routes for remaining amount.
                         # note: path-finding runs in a separate thread so that we don't block the asyncio loop
                         # graph updates might occur during the computation
