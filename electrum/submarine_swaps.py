@@ -814,7 +814,7 @@ class SwapManager(Logger):
             lightning_amount_sat=lightning_amount_sat)
         return swap
 
-    async def create_reverse_swap_v1(self, *, invoice: Invoice, refund_pubkey: bytes) -> SwapData:
+    async def create_reverse_swap_v1(self, *, invoice: str, refund_pubkey: bytes) -> SwapData:
         """ server method for v1 workflow:
 
         - User generates an LN invoice with RHASH, and knows preimage.
@@ -838,7 +838,10 @@ class SwapManager(Logger):
         if not onchain_amount_sat:
             raise Exception("no onchain amount")
 
-        success, log = await self.lnworker.pay_invoice(invoice, probe_only=True)
+        success, log = await self.lnworker.pay_invoice(
+            Invoice.from_bech32(invoice),
+            probe_only=True
+        )
         self.logger.debug(f'create_reverse_swap_v1: Can route invoice? {success}')
 
         if not success:
@@ -1614,7 +1617,7 @@ class SwapManager(Logger):
             assert len(refund_pubkey) == 33
 
             swap = await self.create_reverse_swap_v1(
-                invoice=Invoice.from_bech32(their_invoice),
+                invoice=their_invoice,
                 refund_pubkey=refund_pubkey
             )
 
