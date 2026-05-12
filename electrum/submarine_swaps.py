@@ -2149,7 +2149,7 @@ class NostrTransport(SwapServerTransport):
                 if method == 'addswapinvoice':  # client-forward-swap phase2
                     r = self.sm.server_add_swap_invoice(request)
                 elif method == 'createswap':  # v1: client-forward-swap & client-reverse-swap
-                    r = self.sm.server_create_swap(request)
+                    r = await self.sm.server_create_swap(request)
                 elif method == 'createnormalswap':  # client-forward-swap phase1
                     r = self.sm.server_create_normal_swap(request)
                 else:
