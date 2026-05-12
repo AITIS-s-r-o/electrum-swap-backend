@@ -1614,7 +1614,7 @@ class SwapManager(Logger):
             assert len(refund_pubkey) == 33
 
             swap = await self.create_reverse_swap_v1(
-                invoice=their_invoice,
+                invoice=Invoice.from_bech32(their_invoice),
                 refund_pubkey=refund_pubkey
             )
 
