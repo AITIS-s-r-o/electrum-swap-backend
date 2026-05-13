@@ -2285,7 +2285,7 @@ class Commands(Logger):
                 )
             except SwapServerError as e:
                 return {
-                    'error': str(e.message)
+                    'error': str(e) or 'An unknown error occurred'
                 }
 
             self.logger.info(f"wex_forward_swap; swapData='{swapData}'")
