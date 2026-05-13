@@ -48,7 +48,7 @@ from .lnmsg import OnionWireSerializer
 from .lnworker import LN_P2P_NETWORK_TIMEOUT
 from .logging import Logger
 from .onion_message import create_blinded_path, send_onion_message_to
-from .submarine_swaps import NostrTransport
+from .submarine_swaps import NostrTransport, SwapServerError
 from .util import (
     bfh, json_decode, json_normalize, is_hash256_str, is_hex_str, to_bytes, parse_max_spend, to_decimal,
     UserFacingException, InvalidPassword
@@ -2283,10 +2283,9 @@ class Commands(Logger):
                     expected_onchain_amount_sat=onchain_amount_sat,
                     provider_pk=provider_pk
                 )
-            except UserFacingException as e:
-                return {
-                    'error': str(e) or 'An unknown error occurred'
-                }
+            except SwapServerError as e:
+                self.logger.debug(f"wex_forward_swap; Swap server error reported: {e}")
+                raise UserFacingException(f"Swap server error: {str(e)}")
 
             self.logger.info(f"wex_forward_swap; swapData='{swapData}'")
         return {
