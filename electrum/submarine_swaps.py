@@ -2300,7 +2300,7 @@ class NostrTransport(SwapServerTransport):
         response = await fut
         assert isinstance(response, dict)
         if 'error' in response:
-            if isinstance(response['error'], str) and response['error'] == "Internal Server Error: <class 'NoPathFound'>":
+            if isinstance(response['error'], str) and response['error'] == "Internal Server Error: <class 'electrum.lnutil.NoPathFound'>":
                 self.logger.warning(f"error from swap server {provider_pk} reporting that no LN path could be found: {response['error']}")
             else:
                 self.logger.warning(f"error from swap server {provider_pk} [DO NOT TRUST THIS MESSAGE]: {response['error']}")
