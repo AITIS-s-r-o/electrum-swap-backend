@@ -1587,7 +1587,7 @@ class SwapManager(Logger):
             self.logger.error(f"- request: {request_data}")
             self.logger.error(f"- ln_invoice: {ln_invoice}")
             self.logger.error(f"- response: {data}")
-            raise SwapServerError(f"Normal swap failure: {str(e)}") from e
+            raise SwapServerError(f"{str(e)}") from e
 
         del data  # parsing done
 
