@@ -1866,7 +1866,6 @@ class LNWallet(Logger):
             )
 
             if probe_only:
-                self.logger.debug(f'pay_invoice: Can route invoice? {probe_only_result}')
                 return probe_only_result, []
 
             success = True
@@ -1964,7 +1963,6 @@ class LNWallet(Logger):
                     # taken until the htlcs are added to the channel so the next splitting attempt
                     # acts on a correct channel balance.
                     async with self._channel_sending_capacity_lock:
-                        self.logger.debug(f'lnworker.pay_to_node: 1. create a set of routes for remaining amount.')
                         # 1. create a set of routes for remaining amount.
                         # note: path-finding runs in a separate thread so that we don't block the asyncio loop
                         # graph updates might occur during the computation
@@ -1977,13 +1975,11 @@ class LNWallet(Logger):
                             budget=budget._replace(fee_msat=remaining_fee_budget_msat),
                         )
 
-                        self.logger.debug(f'lnworker.pay_to_node: create_routes_for_payment called')
                         can_route = False
 
                         # 2. send htlcs
                         async for sent_htlc_info, cltv_delta, trampoline_onion in routes:
                             if probe_only:
-                                self.logger.debug(f'lnworker.pay_to_node: Route={sent_htlc_info}')
                                 can_route = True
                                 continue
 
@@ -1996,7 +1992,6 @@ class LNWallet(Logger):
                             )
 
                         if probe_only:
-                            self.logger.debug(f'lnworker.pay_to_node: -> can_route={can_route}')
                             return can_route
                     # invoice_status is triggered in self.set_invoice_status when it actually changes.
                     # It is also triggered here to update progress for a lightning payment in the GUI

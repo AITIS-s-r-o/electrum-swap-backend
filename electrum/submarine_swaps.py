@@ -842,7 +842,6 @@ class SwapManager(Logger):
             Invoice.from_bech32(invoice),
             probe_only=True
         )
-        self.logger.debug(f'create_reverse_swap_v1: Can route invoice? {success}')
 
         if not success:
             raise NoPathFound("no LN route to pay the invoice found")
