@@ -2026,7 +2026,7 @@ class LNWallet(Logger):
             raise
         finally:
             paysession.is_active = False
-            if paysession.can_be_deleted():
+            if probe_only or paysession.can_be_deleted():
                 self._paysessions.pop(payment_key)
             paysession.logger.info(f"pay_to_node ending session for RHASH={payment_hash.hex()}")
 
