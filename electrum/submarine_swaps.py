@@ -1541,8 +1541,10 @@ class SwapManager(Logger):
         }
 
         self.logger.debug(f'fswap: sending request for {lightning_amount_sat}')
-        data = await transport.wex_send_request_to_server(provider_pk, 'createswap', request_data,)
+        data = None
+
         try:
+            data = await transport.wex_send_request_to_server(provider_pk, 'createswap', request_data,)
             payment_hash = data['id']
             assert isinstance(payment_hash, str), type(payment_hash)
             assert payment_hash == rhash, "swapserver returned inconsistent payment hash"
@@ -1585,7 +1587,7 @@ class SwapManager(Logger):
             self.logger.error(f"- request: {request_data}")
             self.logger.error(f"- ln_invoice: {ln_invoice}")
             self.logger.error(f"- response: {data}")
-            raise SwapServerError("failed to parse response from swapserver for createswap") from e
+            raise SwapServerError(f"{str(e)}") from e
 
         del data  # parsing done
 
@@ -2286,7 +2288,7 @@ class NostrTransport(SwapServerTransport):
         return response
 
     # This is a copy of send_request_to_server method above with modifications for WEX.
-    @log_exceptions
+    # @log_exceptions # Exceptions are thrown from this method
     async def wex_send_request_to_server(self, provider_pk: str, method: str, request_data: dict) -> dict:
         self.logger.debug(f"wex swapserver req: npub: {provider_pk}, method: {method} relays: {self.relays}")
         request_data['method'] = method
@@ -2301,7 +2303,11 @@ class NostrTransport(SwapServerTransport):
         assert isinstance(response, dict)
         if 'error' in response:
             self.logger.warning(f"error from swap server {provider_pk} [DO NOT TRUST THIS MESSAGE]: {response['error']}")
-            raise SwapServerError()
+
+            if isinstance(response['error'], str) and response['error'] == "Internal Server Error: <class 'electrum.lnutil.NoPathFound'>":
+                raise SwapServerError('no LN path for the payment could be found')
+            else:
+                raise SwapServerError()
         return response
 
     async def _get_pairs_loop(self):
