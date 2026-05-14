@@ -37,7 +37,7 @@ from .util import (
     run_sync_function_on_asyncio_thread, trigger_callback, NoDynamicFeeEstimates, UserFacingException,
 )
 from . import lnutil
-from .lnutil import hex_to_bytes, REDEEM_AFTER_DOUBLE_SPENT_DELAY, Keypair
+from .lnutil import hex_to_bytes, REDEEM_AFTER_DOUBLE_SPENT_DELAY, Keypair, NoPathFound
 from .lnaddr import lndecode
 from .json_db import StoredObject, stored_in
 from . import constants
@@ -845,7 +845,7 @@ class SwapManager(Logger):
         self.logger.debug(f'create_reverse_swap_v1: Can route invoice? {success}')
 
         if not success:
-            raise Exception("no LN route to pay the invoice")
+            raise NoPathFound("no LN route to pay the invoice found")
 
         self.logger.info(f'client requested forward swap; lightning_amount_sat={lightning_amount_sat}, '
                          f'onchain_amount_sat={onchain_amount_sat}, height={height}, locktime={locktime}')
