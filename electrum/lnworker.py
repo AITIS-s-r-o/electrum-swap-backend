@@ -1955,7 +1955,6 @@ class LNWallet(Logger):
         try:
             while True:
                 if (amount_to_send := paysession.get_outstanding_amount_to_send()) > 0:
-
                     remaining_fee_budget_msat = (budget.fee_msat * amount_to_send) // amount_to_pay
                     self.logger.debug(f'lnworker.pay_to_node: amount_to_send={amount_to_send}, amount_to_pay={amount_to_pay}, remaining_fee_budget_msat={remaining_fee_budget_msat}')
 
