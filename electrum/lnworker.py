@@ -1955,7 +1955,6 @@ class LNWallet(Logger):
             while True:
                 if (amount_to_send := paysession.get_outstanding_amount_to_send()) > 0:
                     remaining_fee_budget_msat = (budget.fee_msat * amount_to_send) // amount_to_pay
-
                     # splitting the amount of the payment between our channels requires the correct
                     # available channel balance. to prevent concurrent splitting attempts from
                     # using stale channel balances for the split calculation a lock needs to be
