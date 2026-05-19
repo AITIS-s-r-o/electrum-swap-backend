@@ -100,6 +100,25 @@ WITNESS_TEMPLATE_SWAP = [
     opcodes.OP_CHECKSIG
 ]
 
+# Witness template used by WEX for the old forward swap flow.
+# See https://github.com/spesmilo/electrum/blob/fd10ae3a3b0c52571755d251b3e087c7aa950050/electrum/submarine_swaps.py#L45
+WEX_WITNESS_TEMPLATE_SWAP_OLD = [
+    opcodes.OP_HASH160,
+    OPPushDataGeneric(lambda x: x == 20),  # idx 1. payment_hash
+    opcodes.OP_EQUAL,
+    opcodes.OP_IF,
+    OPPushDataPubkey,                      # idx 4. server_pubkey
+    opcodes.OP_ELSE,
+    OPPushDataGeneric(None),               # idx 6. locktime
+    opcodes.OP_CHECKLOCKTIMEVERIFY,
+    opcodes.OP_DROP,
+    OPPushDataPubkey,                      # idx 9. client_pubkey
+    opcodes.OP_ENDIF,
+    opcodes.OP_CHECKSIG
+]
+
+CAP_FORWARD_V1 = "forwardv1"               # supports forward swaps with v1 flow
+
 
 def _check_swap_scriptcode(
     *,
@@ -135,6 +154,52 @@ def _check_swap_scriptcode(
     ):
         raise Exception("failed to rebuild swap script from scratch")
 
+# Checks that the redeem script, which was received from the swap provider, for a normal swap is correctly formed, and consistent with the other parameters.
+def _wex_check_normal_redeem_script(
+    *,
+    redeem_script: bytes,
+    lockup_address: str,
+    payment_hash: bytes,
+    locktime: int,
+    refund_pubkey: bytes
+) -> None:
+    """Checks the redeem script received from the swap provider.
+
+    arg:redeem_script:bytes:Redeem script received from the swap provider to check.
+    arg:lockup_address:str:Lockup address that the swap provider gave us. We check that the redeem script corresponds to this lockup address.
+    arg:payment_hash:bytes:Hash of the preimage. We check that this payment hash is included in the redeem script. The hash has already been verified to be consistent with
+        the lightning invoice.
+    arg:locktime:int:Locktime for the swap. We check that this locktime is included in the redeem script. We have already verified that this locktime is sufficiently far in the
+        future
+    arg:refund_pubkey:bytes:Public key that the server should use in the redeem script to allow the user to claim the on-chain output.
+    """
+
+    parsed_script = [x for x in script_GetOp(redeem_script)]
+    if not match_script_against_template(redeem_script, WEX_WITNESS_TEMPLATE_SWAP_OLD):
+        raise Exception("fswap check failed: scriptcode does not match template")
+
+    if script_to_p2wsh(redeem_script) != lockup_address:
+        raise Exception("fswap check failed: inconsistent scriptcode and address")
+
+    if ripemd(payment_hash) != parsed_script[1][1]:
+        raise Exception("fswap check failed: our preimage not in script")
+
+    if refund_pubkey != parsed_script[9][1]:
+        raise Exception("fswap check failed: our pubkey not in script")
+
+    if locktime != int.from_bytes(parsed_script[6][1], byteorder='little'):
+        raise Exception("fswap check failed: inconsistent locktime and script")
+
+    # Let's just rebuild the full script from scratch.
+    server_pubkey = parsed_script[4][1]
+    if redeem_script != _wex_construct_swap_scriptcode(
+        payment_hash=payment_hash,
+        locktime=locktime,
+        server_pubkey=server_pubkey,
+        client_pubkey=refund_pubkey,
+    ):
+        raise Exception("fswap failed to rebuild swap script from scratch")
+
 
 def _construct_swap_scriptcode(
     payment_hash: bytes,
@@ -149,6 +214,22 @@ def _construct_swap_scriptcode(
     return construct_script(
         WITNESS_TEMPLATE_SWAP,
         values={1: 32, 5: ripemd(payment_hash), 7: claim_pubkey, 10: locktime, 13: refund_pubkey}
+    )
+
+# Copy of _construct_swap_scriptcode with changes for WEX.
+def _wex_construct_swap_scriptcode(
+    payment_hash: bytes,
+    locktime: int,
+    server_pubkey: bytes,
+    client_pubkey: bytes,
+) -> bytes:
+    assert isinstance(payment_hash, bytes) and len(payment_hash) == 32
+    assert isinstance(locktime, int) and (0 <= locktime <= bitcoin.NLOCKTIME_BLOCKHEIGHT_MAX)
+    assert isinstance(server_pubkey, bytes) and len(server_pubkey) == 33
+    assert isinstance(client_pubkey, bytes) and len(client_pubkey) == 33
+    return construct_script(
+        WEX_WITNESS_TEMPLATE_SWAP_OLD,
+        values={1: ripemd(payment_hash), 4: server_pubkey, 6: locktime, 9: client_pubkey}
     )
 
 
@@ -183,6 +264,7 @@ class SwapOffer:
     pow_bits = attr.ib(type=int)
     server_pubkey = attr.ib(type=str)
     timestamp = attr.ib(type=int)
+    capabilities = attr.ib(type=set)
 
     @property
     def server_npub(self):
@@ -767,6 +849,35 @@ class SwapManager(Logger):
         self._add_or_reindex_swap(swap, is_new=True)
         self.add_lnwatcher_callback(swap)
         return swap, invoice, prepay_invoice
+
+    # Creates SwapData for a forward swap.
+    # This is a copy of the method above with modifications for WEX.
+    def wex_add_normal_swap(
+            self, *,
+            redeem_script: bytes,
+            locktime: int,  # onchain, abs
+            onchain_amount_sat: int,
+            lightning_amount_sat: int,
+            payment_hash: bytes,
+            lockup_address: str,
+    ) -> Tuple[SwapData]:
+        swap = SwapData(
+            redeem_script = redeem_script,
+            locktime = locktime,
+            privkey="",
+            preimage="",
+            prepay_hash = None,
+            lockup_address = lockup_address,
+            onchain_amount = onchain_amount_sat,
+            claim_to_output=None,
+            lightning_amount = lightning_amount_sat,
+            is_reverse = False,
+            is_redeemed = False,
+            funding_txid = None,
+            spending_txid = None,
+        )
+        swap._payment_hash = payment_hash
+        return swap
 
     def create_reverse_swap(self, *, lightning_amount_sat: int, their_pubkey: bytes) -> SwapData:
         """ server method. """
@@ -1387,6 +1498,108 @@ class SwapManager(Logger):
             claim_to_output=claim_to_output,
         )
         return swap, invoice, fee_invoice
+
+
+    # Client method for requesting forward swap using old flow.
+    async def wex_normal_swap(
+            self,
+            *,
+            transport: 'SwapServerTransport',
+            invoice: str,
+            refundPublicKey: str,
+            expected_onchain_amount_sat: int,
+            provider_pk: str,
+    ) -> Optional[SwapData]:
+        """Send on on-chain, receive Lightning using the old flow.
+
+        arg:str:invoice:Lightning invoice from the client that the swap provider should pay.
+        arg:str:refundPublicKey:Public key of the refund in hex format.
+        arg:int:expected_onchain_amount_sat:Expected amount of on-chain satoshis to be sent on-chain by the client.
+        arg:provider_pk:str:Selected swap provider's public key in hex.
+
+        - User generates an LN invoice with RHASH, and knows preimage.
+        - User creates on-chain output locked to RHASH.
+        - Server pays LN invoice. User reveals preimage.
+        - Server spends the on-chain output using preimage.
+        cltv safety requirement: (onchain_locktime > LN_locktime), otherwise server is vulnerable
+        """
+        assert self.network
+        assert self.lnwatcher
+
+        ln_invoice = Invoice.from_bech32(invoice)
+        lightning_amount_sat = int(ln_invoice.amount_msat / 1000)
+        rhash = ln_invoice.rhash
+
+        self._sanity_check_swap_costs(
+            incoming_sat=expected_onchain_amount_sat, outgoing_sat=lightning_amount_sat)
+
+        request_data = {
+            "type": "submarine",
+            "pairId": "BTC/BTC",
+            "invoice": invoice,
+            "refundPublicKey": refundPublicKey,
+        }
+
+        self.logger.debug(f'fswap: sending request for {lightning_amount_sat}')
+        data = None
+
+        try:
+            data = await transport.wex_send_request_to_server(provider_pk, 'createswap', request_data,)
+            payment_hash = data['id']
+            assert isinstance(payment_hash, str), type(payment_hash)
+            assert payment_hash == rhash, "swapserver returned inconsistent payment hash"
+
+            onchain_amount = data['expectedAmount']
+            assert isinstance(onchain_amount, int), type(onchain_amount)
+
+            # Check that onchain_amount is not more than what we estimated.
+            if onchain_amount > expected_onchain_amount_sat:
+                raise Exception(f"fswap check failed: onchain_amount is more than what we estimated: "
+                                f"{onchain_amount} > {expected_onchain_amount_sat}")
+            locktime = data['timeoutBlockHeight']
+            assert isinstance(locktime, int), type(locktime)
+
+            # Verify that they are not locking up funds for more than a day.
+            if locktime - self.network.get_local_height() >= 144:
+                raise Exception("fswap check failed: locktime too far in future")
+
+            lockup_address = data['address']
+            assert isinstance(lockup_address, str), type(lockup_address)
+            assert bitcoin.is_address(lockup_address), lockup_address
+
+            redeem_script_hex = data['redeemScript']
+            assert isinstance(redeem_script_hex, str), type(redeem_script_hex)
+
+            redeem_script = bytes.fromhex(redeem_script_hex)
+            refund_pk = bytes.fromhex(refundPublicKey)
+            hash_bytes = bytes.fromhex(payment_hash)
+
+            _wex_check_normal_redeem_script(
+                redeem_script=redeem_script,
+                lockup_address=lockup_address,
+                payment_hash=hash_bytes,
+                locktime=locktime,
+                refund_pubkey=refund_pk
+            )
+
+        except Exception as e:
+            self.logger.error(f"failed to parse response from swapserver for createswap: {e!r}")
+            self.logger.error(f"- request: {request_data}")
+            self.logger.error(f"- ln_invoice: {ln_invoice}")
+            self.logger.error(f"- response: {data}")
+            raise SwapServerError(f"{str(e)}") from e
+
+        del data  # parsing done
+
+        swap = self.wex_add_normal_swap(
+            redeem_script=redeem_script,
+            locktime=locktime,
+            onchain_amount_sat=onchain_amount,
+            lightning_amount_sat=lightning_amount_sat,
+            payment_hash=payment_hash,
+            lockup_address=lockup_address)
+
+        return swap
 
     def _add_or_reindex_swap(self, swap: SwapData, *, is_new: bool) -> None:
         with self.swaps_lock:
@@ -2075,7 +2288,7 @@ class NostrTransport(SwapServerTransport):
         return response
 
     # This is a copy of send_request_to_server method above with modifications for WEX.
-    @log_exceptions
+    # @log_exceptions # Exceptions are thrown from this method
     async def wex_send_request_to_server(self, provider_pk: str, method: str, request_data: dict) -> dict:
         self.logger.debug(f"wex swapserver req: npub: {provider_pk}, method: {method} relays: {self.relays}")
         request_data['method'] = method
@@ -2090,7 +2303,11 @@ class NostrTransport(SwapServerTransport):
         assert isinstance(response, dict)
         if 'error' in response:
             self.logger.warning(f"error from swap server {provider_pk} [DO NOT TRUST THIS MESSAGE]: {response['error']}")
-            raise SwapServerError()
+
+            if isinstance(response['error'], str) and response['error'] == "Internal Server Error: <class 'electrum.lnutil.NoPathFound'>":
+                raise SwapServerError('no LN path for the payment could be found')
+            else:
+                raise SwapServerError()
         return response
 
     async def _get_pairs_loop(self):
@@ -2146,12 +2363,24 @@ class NostrTransport(SwapServerTransport):
             except Exception:
                 self.logger.debug(f"swap fees couldn't be parsed", exc_info=True)
                 continue
+
+            # WEX Extract optional capabilities announced by the swap server. This is supposed to be a set of strings.
+            caps = set(content.get('capabilities', []))
+            if not isinstance(caps, (list, set)):
+                caps = []
+
+            if not all(isinstance(x, str) for x in caps):
+                caps = []
+
+            capabilities = set(caps)
+
             offer = SwapOffer(
                 pairs=pairs,
                 relays=server_relays[:10],
                 timestamp=event.created_at,
                 server_pubkey=pubkey,
                 pow_bits=pow_bits,
+                capabilities=capabilities,
             )
             self._offers[offer.server_npub] = offer
             if self.config.SWAPSERVER_NPUB == offer.server_npub:

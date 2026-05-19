@@ -274,6 +274,7 @@ class AuthenticatedServer(Logger):
             }
         except BaseException as e:
             self.logger.exception("internal error while executing RPC")
+            self.logger.exception(f"- request: {request}")
             response['error'] = {
                 'code': JsonRPCError.Codes.INTERNAL,
                 'message': "internal error while executing RPC",
@@ -584,6 +585,17 @@ class Daemon(Logger):
                 self.config.CURRENT_WALLET = None
             return True
         return False
+
+    def rename_wallet_file(self, old_path: str, new_path: str):
+        old_path = standardize_path(old_path)
+        new_path = standardize_path(new_path)
+        if os.path.exists(new_path):
+            raise ValueError("Wallet file already exists")
+        os.rename(old_path, new_path)
+        self.logger.debug(f'renamed wallet: {old_path} -> {new_path}')
+        self.update_recently_opened_wallets(old_path, remove=True)
+        if self.config.CURRENT_WALLET == old_path:
+            self.config.CURRENT_WALLET = new_path
 
     def stop_wallet(self, path: str) -> bool:
         """Returns True iff a wallet was found."""

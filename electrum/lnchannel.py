@@ -801,7 +801,7 @@ class Channel(AbstractChannel):
         self._outgoing_channel_update = None  # type: Optional[bytes]
         self.revocation_store = RevocationStore(state["revocation_store"])
         self._can_send_ctx_updates = True  # type: bool
-        self._receive_fail_reasons = {}  # type: Dict[int, (bytes, OnionRoutingFailure)]
+        self._receive_fail_reasons = {}  # type: Dict[int, tuple[bytes | None, OnionRoutingFailure | None]]
         self.unconfirmed_closing_txid = None # not a state, only for GUI
         self.sent_channel_ready = False # no need to persist this, because channel_ready is re-sent in channel_reestablish
         self.sent_announcement_signatures = False
@@ -1101,8 +1101,6 @@ class Channel(AbstractChannel):
         util.trigger_callback('channel', self.lnworker.wallet, self)
 
     def is_frozen_for_receiving(self) -> bool:
-        if self.lnworker.uses_trampoline() and not self.lnworker.is_trampoline_peer(self.node_id):
-            return True
         return self.storage.get('frozen_for_receiving', False)
 
     def set_frozen_for_receiving(self, b: bool) -> None:
