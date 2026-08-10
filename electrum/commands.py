@@ -2287,7 +2287,19 @@ class Commands(Logger):
                 raise TimeoutError("Transport failed to connect in 15 seconds.")
 
             self.logger.info("wex_reverse_swap; About to get reverse swap data.")
-            claim_fee = sm.get_fee_for_txbatcher()
+
+            offers = transport.get_recent_offers()
+
+            claim_fee = None
+
+            for offer in offers:
+                if offer.server_pubkey == provider_pk:
+                    claim_fee = offer.pairs.mining_fee
+                    break
+
+            if claim_fee is None:
+                raise TimeoutError(f"Could not find offer for the specified provider '{provider_pk}'.")
+
             self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}'")
 
             onchain_amount_sat = onchain_amount + claim_fee
