@@ -659,6 +659,25 @@ class SwapManager(Logger):
                 # we have been paid. do not try to get refund.
                 return
         else:
+            # Forward V1 flow preserves the code removed in https://github.com/spesmilo/electrum/commit/5af2bb7e97e53bab1785eee8861bffcfdc3cd3a5.
+            if swap.preimage is None:
+                swap.preimage = self.lnworker.get_preimage(swap.payment_hash)
+
+            if swap.preimage is None:
+                funding_height = self.lnwatcher.adb.get_tx_height(txin.prevout.txid.hex())
+                if funding_height.conf <= 0:
+                    return
+                key = swap.payment_hash.hex()
+                if remaining_time <= MIN_LOCKTIME_DELTA:
+                    if key in self.invoices_to_pay:
+                        # fixme: should consider cltv of ln payment
+                        self.logger.info(f'locktime too close {key} {remaining_time}')
+                        self.invoices_to_pay.pop(key, None)
+                    return
+                if key not in self.invoices_to_pay:
+                    self.invoices_to_pay[key] = 0
+                return
+
             assert swap.preimage, f"reverse swap missing preimage? {swap.payment_hash.hex()=}"
             # if we revealed the preimage before we must continue trying to claim
             if remaining_time <= MIN_LOCKTIME_DELTA_FOR_CLAIM and public_preimage is None:
@@ -969,7 +988,7 @@ class SwapManager(Logger):
         locktime = height + LOCKTIME_DELTA_REFUND
         if self.network.blockchain().is_tip_stale():
             raise Exception("our blockchain tip is stale")
-        lnaddr = lndecode(invoice)
+        lnaddr = self.lnworker._check_bolt11_invoice(invoice, max_min_final_cltv_delta=MAX_MIN_FINAL_CLTV_DELTA)
         payment_hash = lnaddr.paymenthash
         lightning_amount_sat = int(lnaddr.get_amount_sat()) # should return int
 
