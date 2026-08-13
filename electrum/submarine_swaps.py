@@ -1793,13 +1793,14 @@ class SwapManager(Logger):
             their_invoice = request['invoice']
             refund_pubkey = bytes.fromhex(request['refundPublicKey'])
             assert len(refund_pubkey) == 33
+            self.lnworker._check_bolt11_invoice(their_invoice, max_min_final_cltv_delta=MAX_MIN_FINAL_CLTV_DELTA)
 
             swap = await self.create_reverse_swap_v1(
                 invoice=their_invoice,
                 refund_pubkey=refund_pubkey
             )
 
-            self.server_add_swap_invoice_v1(request['invoice'], request['refundPublicKey'])
+            self.server_add_swap_invoice_v1(their_invoice, request['refundPublicKey'])
 
             response = {
                 "id": swap.payment_hash.hex(),
