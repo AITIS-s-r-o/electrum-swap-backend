@@ -2474,7 +2474,7 @@ class NostrTransport(SwapServerTransport):
     # This is a copy of send_request_to_server method above with modifications for WEX.
     # @log_exceptions # Exceptions are thrown from this method
     async def wex_send_request_to_server(self, provider_pk: str, method: str, request_data: dict) -> dict:
-        self.logger.debug(f"wex swapserver req: npub: {provider_pk}, method: {method} relays: {self.relays}")
+        self.logger.debug(f"wex swapserver req: provider_pk: {provider_pk}, method: {method} relays: {self.relays}")
         request_data['method'] = method
         server_pubkey = provider_pk
 
