@@ -2293,10 +2293,12 @@ class Commands(Logger):
             claim_fee = None
 
             for offer in offers:
+                self.logger.info(f"wex_reverse_swap; offer: '{offer}'")
                 if offer.server_pubkey == provider_pk:
                     claim_fee = offer.pairs.mining_fee
-                    self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}', offer='{offer}'")
                     break
+
+            self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}'")
 
             if claim_fee is None:
                 raise TimeoutError(f"Could not find offer for the specified provider '{provider_pk}'.")
