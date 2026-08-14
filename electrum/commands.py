@@ -71,7 +71,7 @@ from .wallet import (
 from .address_synchronizer import TX_HEIGHT_LOCAL
 from .mnemonic import Mnemonic
 from .lnutil import (channel_id_from_funding_tx, LnFeatures, SENT, RECEIVED, MIN_FINAL_CLTV_DELTA_ACCEPTED,
-                     PaymentFeeBudget, NBLOCK_CLTV_DELTA_TOO_FAR_INTO_FUTURE)
+                     PaymentFeeBudget, NBLOCK_CLTV_DELTA_TOO_FAR_INTO_FUTURE, to_nip19)
 from .plugin import run_hook, DeviceMgr, Plugins
 from .version import ELECTRUM_VERSION
 from .simple_config import SimpleConfig
@@ -2288,20 +2288,23 @@ class Commands(Logger):
 
             self.logger.info("wex_reverse_swap; About to get reverse swap data.")
 
-            offers = transport.get_recent_offers()
+            provider_npub = to_nip19('npub', provider_pk)
+            offer = transport.get_offer(provider_npub)
 
-            claim_fee = None
+            # Wait up to 10 seconds for the offers to be initialized.
+            if offer is None:
+                for _ in range(40):
+                    await asyncio.sleep(0.25)
+                    offer = transport.get_offer(provider_npub)
+                    if offer is not None:
+                        break
 
-            for offer in offers:
-                self.logger.info(f"wex_reverse_swap; offer: '{offer}'")
-                if offer.server_pubkey == provider_pk:
-                    claim_fee = offer.pairs.mining_fee
-                    break
-
-            self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}'")
-
-            if claim_fee is None:
+            if offer is None:
                 raise TimeoutError(f"Could not find offer for the specified provider '{provider_pk}'.")
+
+            claim_fee = offer.pairs.mining_fee
+
+            self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}', offer='{offer}'")
 
             onchain_amount_sat = onchain_amount + claim_fee
             self.logger.info(f"wex_reverse_swap; onchain_amount_sat='{onchain_amount_sat}'")
