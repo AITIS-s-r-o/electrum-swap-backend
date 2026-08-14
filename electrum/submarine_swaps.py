@@ -1099,7 +1099,6 @@ class SwapManager(Logger):
             spending_txid=None,
         )
         self._add_swap(payment_hash, swap)
-        self._add_or_reindex_swap(swap, is_new=True)
         self.add_lnwatcher_callback(swap)
         return swap
 
