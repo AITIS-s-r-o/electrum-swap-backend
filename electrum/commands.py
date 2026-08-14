@@ -71,7 +71,7 @@ from .wallet import (
 from .address_synchronizer import TX_HEIGHT_LOCAL
 from .mnemonic import Mnemonic
 from .lnutil import (channel_id_from_funding_tx, LnFeatures, SENT, RECEIVED, MIN_FINAL_CLTV_DELTA_ACCEPTED,
-                     PaymentFeeBudget, NBLOCK_CLTV_DELTA_TOO_FAR_INTO_FUTURE, to_nip19)
+                     PaymentFeeBudget, NBLOCK_CLTV_DELTA_TOO_FAR_INTO_FUTURE)
 from .plugin import run_hook, DeviceMgr, Plugins
 from .version import ELECTRUM_VERSION
 from .simple_config import SimpleConfig
@@ -80,6 +80,9 @@ from . import GuiImportError
 from . import crypto
 from . import constants
 from . import descriptor
+
+from electrum_aionostr.util import to_nip19
+
 
 if TYPE_CHECKING:
     from .network import Network
