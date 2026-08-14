@@ -274,6 +274,7 @@ class AuthenticatedServer(Logger):
             }
         except BaseException as e:
             self.logger.exception("internal error while executing RPC")
+            self.logger.exception(f"- request: {request}")
             response['error'] = {
                 'code': JsonRPCError.Codes.INTERNAL,
                 'message': "internal error while executing RPC",
