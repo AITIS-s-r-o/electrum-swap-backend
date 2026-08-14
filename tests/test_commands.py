@@ -673,7 +673,8 @@ class TestCommandsTestnet(ElectrumTestCase):
             relays=["wss://relay1.example.com", "wss://relay2.example.com"],
             timestamp=1640995200,
             server_pubkey="a8cffad54f59e2c50a1d40ec0d57f1fc32df9cd2101fad8000215eb4a75b334d",
-            pow_bits=10
+            pow_bits=10,
+            capabilities=set([])
         )
 
         offer2 = SwapOffer(
@@ -687,7 +688,8 @@ class TestCommandsTestnet(ElectrumTestCase):
             relays=["ws://relay3.example.onion", "wss://relay4.example.com"],
             timestamp=1640995300,
             server_pubkey="7a483b6546be900481f6be2d2cc1b47c779ee89b4b66d1a066a8dc81c63ad1f0",
-            pow_bits=12
+            pow_bits=12,
+            capabilities=set([])
         )
         mock_offers = [offer1, offer2]
         mock_transport = mock.Mock(NostrTransport)
@@ -703,18 +705,28 @@ class TestCommandsTestnet(ElectrumTestCase):
 
         expected_result = {
             offer1.server_npub: {
-                "percentage_fee": offer1.pairs.percentage,
+                "percentage_fee": float(offer1.pairs.percentage),
                 "max_forward_sat": offer1.pairs.max_forward,
                 "max_reverse_sat": offer1.pairs.max_reverse,
                 "min_amount_sat": offer1.pairs.min_amount,
                 "prepayment": 2 * offer1.pairs.mining_fee,
+                "mining_fee": offer1.pairs.mining_fee,
+                "timestamp": offer1.timestamp,
+                "server_pubkey": offer1.server_pubkey,
+                "pow_bits": offer1.pow_bits,
+                "capabilities": list(offer1.capabilities),
             },
             offer2.server_npub: {
-                "percentage_fee": offer2.pairs.percentage,
+                "percentage_fee": float(offer2.pairs.percentage),
                 "max_forward_sat": offer2.pairs.max_forward,
                 "max_reverse_sat": offer2.pairs.max_reverse,
                 "min_amount_sat": offer2.pairs.min_amount,
                 "prepayment": 2 * offer2.pairs.mining_fee,
+                "mining_fee": offer2.pairs.mining_fee,
+                "timestamp": offer2.timestamp,
+                "server_pubkey": offer2.server_pubkey,
+                "pow_bits": offer2.pow_bits,
+                "capabilities": list(offer2.capabilities),
             }
         }
         self.assertEqual(result, expected_result)
