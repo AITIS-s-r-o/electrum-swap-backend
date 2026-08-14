@@ -2294,8 +2294,8 @@ class Commands(Logger):
 
             for offer in offers:
                 if offer.server_pubkey == provider_pk:
-                    self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}', offer='{offer}'")
                     claim_fee = offer.pairs.mining_fee
+                    self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}', offer='{offer}'")
                     break
 
             if claim_fee is None:
