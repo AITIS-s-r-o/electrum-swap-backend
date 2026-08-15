@@ -453,7 +453,7 @@ class SwapManager(Logger):
             keypair = self.lnworker.nostr_keypair if self.is_server else generate_random_keypair()
             return NostrTransport(self.config, self, keypair)
 
-    # This is a copy of create_transport method above with modifications for WEX. Specifically, it forces the use of NostrTransport and sets the server pubkey in the config from 
+    # This is a copy of create_transport method above with modifications for WEX. Specifically, it forces the use of NostrTransport and sets the server pubkey in the config from
     # the parameter.
     def wex_create_transport(self, provider_pk) -> 'SwapServerTransport':
         """
@@ -468,7 +468,7 @@ class SwapManager(Logger):
         self.logger.debug(f"Using npub {config_copy.SWAPSERVER_NPUB}.")
         keypair = self.lnworker.nostr_keypair if self.is_server else generate_random_keypair()
         return NostrTransport(config_copy, self, keypair)
-            
+
     async def wait_for_swap_transport(self, new_swap_transport: 'SwapServerTransport') -> bool:
         """
         Wait until we found the announcement event of the configured swap server.
@@ -1550,13 +1550,9 @@ class SwapManager(Logger):
         """
         assert self.network
         assert self.lnwatcher
-        self._sanity_check_swap_costs(
-            incoming_sat=expected_onchain_amount_sat, outgoing_sat=lightning_amount_sat)
-        """* WEX privkey = os.urandom(32)
-        our_pubkey = ECPrivkey(privkey).get_public_key_bytes(compressed=True)
-        preimage = os.urandom(32)
-        payment_hash = sha256(preimage)
-        """
+
+        self._sanity_check_swap_costs(incoming_sat=expected_onchain_amount_sat, outgoing_sat=lightning_amount_sat)
+        self._sanity_check_prepayment(prepayment_sat=prepayment_sat, lightning_amount_sat=lightning_amount_sat)
         our_pubkey =  bytes.fromhex(claim_pk)
         payment_hash = bytes.fromhex(hash)
 
@@ -1607,12 +1603,12 @@ class SwapManager(Logger):
         if self.network.blockchain().is_tip_stale():
             raise Exception("our blockchain tip is stale")
         # verify invoice payment_hash
-        lnaddr = self.lnworker._check_bolt11_invoice(invoice)
+        lnaddr = self.lnworker._check_bolt11_invoice(invoice, max_min_final_cltv_delta=MAX_MIN_FINAL_CLTV_DELTA)
         invoice_amount = int(lnaddr.get_amount_sat())
         if lnaddr.paymenthash != payment_hash:
             raise Exception("rswap check failed: inconsistent RHASH and invoice")
         if fee_invoice:
-            fee_lnaddr = self.lnworker._check_bolt11_invoice(fee_invoice)
+            fee_lnaddr = self.lnworker._check_bolt11_invoice(fee_invoice, max_min_final_cltv_delta=MAX_MIN_FINAL_CLTV_DELTA)
             if fee_lnaddr.get_amount_sat() > prepayment_sat:
                 raise SwapServerError(_("Mining fee requested by swap-server larger "
                                         "than what was announced in their offer."))
@@ -1624,33 +1620,6 @@ class SwapManager(Logger):
         if int(invoice_amount) != lightning_amount_sat:
             raise Exception(f"rswap check failed: invoice_amount ({invoice_amount}) "
                             f"not what we requested ({lightning_amount_sat})")
-        """WEX
-        # save swap data to wallet file
-        swap = self.add_reverse_swap(
-            redeem_script=redeem_script,
-            locktime=locktime,
-            privkey=privkey,
-            preimage=preimage,
-            payment_hash=payment_hash,
-            prepay_hash=prepay_hash,
-            onchain_amount_sat=onchain_amount,
-            lightning_amount_sat=lightning_amount_sat,
-            claim_to_output=claim_to_output,
-        )
-        # initiate fee payment.
-        if fee_invoice:
-            fee_invoice_obj = Invoice.from_bech32(fee_invoice)
-            asyncio.ensure_future(self.lnworker.pay_invoice(fee_invoice_obj))
-        # we return if we detect funding
-        async def wait_for_funding(swap):
-            while swap.funding_txid is None:
-                await asyncio.sleep(0.1)
-        # initiate main payment
-        invoice_obj = Invoice.from_bech32(invoice)
-        tasks = [asyncio.create_task(self.lnworker.pay_invoice(invoice_obj, channels=channels)), asyncio.create_task(wait_for_funding(swap))]
-        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        return swap.funding_txid
-        """
 
         swap = self.wex_add_reverse_swap(
             redeem_script=redeem_script,
@@ -1715,16 +1684,24 @@ class SwapManager(Logger):
             onchain_amount = data['expectedAmount']
             assert isinstance(onchain_amount, int), type(onchain_amount)
 
-            # Check that onchain_amount is not more than what we estimated.
-            if onchain_amount > expected_onchain_amount_sat:
-                raise Exception(f"fswap check failed: onchain_amount is more than what we estimated: "
-                                f"{onchain_amount} > {expected_onchain_amount_sat}")
+            # check that onchain_amount equals what we estimated, leave minor buffer for rounding differences
+            # note: lower bounds check is critical too, as _claim_swap picks the funding utxo based on amount
+            # accept off-by ones, similar to get_recv_amount
+            if not (expected_onchain_amount_sat - 1 <= onchain_amount <= expected_onchain_amount_sat):
+                raise Exception(f"fswap check failed: onchain_amount is not what we estimated: "
+                                f"{onchain_amount=} != {expected_onchain_amount_sat=}")
+
             locktime = data['timeoutBlockHeight']
             assert isinstance(locktime, int), type(locktime)
 
-            # Verify that they are not locking up funds for more than a day.
-            if locktime - self.network.get_local_height() >= 144:
+            # verify that they don't make us fund an already expired swap
+            if locktime - self.network.get_local_height() < MIN_LOCKTIME_DELTA:
+                raise Exception("fswap check failed: locktime too close")
+            # verify that they are not locking up funds for too long
+            if locktime - self.network.get_local_height() > MAX_LOCKTIME_DELTA:
                 raise Exception("fswap check failed: locktime too far in future")
+            if self.network.blockchain().is_tip_stale():
+                raise Exception("our blockchain tip is stale")
 
             lockup_address = data['address']
             assert isinstance(lockup_address, str), type(lockup_address)
@@ -2497,7 +2474,7 @@ class NostrTransport(SwapServerTransport):
     # This is a copy of send_request_to_server method above with modifications for WEX.
     # @log_exceptions # Exceptions are thrown from this method
     async def wex_send_request_to_server(self, provider_pk: str, method: str, request_data: dict) -> dict:
-        self.logger.debug(f"wex swapserver req: npub: {provider_pk}, method: {method} relays: {self.relays}")
+        self.logger.debug(f"wex swapserver req: provider_pk: {provider_pk}, method: {method} relays: {self.relays}")
         request_data['method'] = method
         server_pubkey = provider_pk
 

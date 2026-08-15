@@ -81,6 +81,9 @@ from . import crypto
 from . import constants
 from . import descriptor
 
+from electrum_aionostr.util import to_nip19
+
+
 if TYPE_CHECKING:
     from .network import Network
     from .daemon import Daemon
@@ -2287,8 +2290,24 @@ class Commands(Logger):
                 raise TimeoutError("Transport failed to connect in 15 seconds.")
 
             self.logger.info("wex_reverse_swap; About to get reverse swap data.")
-            claim_fee = sm.get_fee_for_txbatcher()
-            self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}'")
+
+            provider_npub = to_nip19('npub', provider_pk)
+            offer = transport.get_offer(provider_npub)
+
+            # Wait up to 10 seconds for the offers to be initialized.
+            if offer is None:
+                for _ in range(40):
+                    await asyncio.sleep(0.25)
+                    offer = transport.get_offer(provider_npub)
+                    if offer is not None:
+                        break
+
+            if offer is None:
+                raise TimeoutError(f"Could not find offer for the specified provider '{provider_pk}'.")
+
+            claim_fee = offer.pairs.mining_fee
+
+            self.logger.info(f"wex_reverse_swap; claim_fee='{claim_fee}', offer='{offer}'")
 
             onchain_amount_sat = onchain_amount + claim_fee
             self.logger.info(f"wex_reverse_swap; onchain_amount_sat='{onchain_amount_sat}'")
