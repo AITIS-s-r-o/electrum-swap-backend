@@ -485,17 +485,47 @@ class SwapManager(Logger):
         self.logger.debug(f"Found {pow_amount} bits of work for Nostr announcement.")
         self.config.SWAPSERVER_ANN_POW_NONCE = nonce
 
+    def _v1_blocks_needed(self, invoice) -> int:
+        # blocks the recipient can withhold the preimage, plus blocks we need to land a claim
+        min_final = invoice.get_min_final_cltv_delta() if invoice is not None else MIN_FINAL_CLTV_DELTA_FOR_CLIENT
+        return min_final + MIN_LOCKTIME_DELTA_FOR_CLAIM + 2
+
+    def _v1_may_pay(self, swap: SwapData, invoice) -> bool:
+        if swap is None or not swap.is_reverse or swap.preimage is not None or swap._is_cancelled:
+            return False
+        if not swap.funding_txid:
+            return False
+        height = self.lnwatcher.adb.get_tx_height(swap.funding_txid)
+        if height.conf <= 0:
+            return False
+        remaining = swap.locktime - self.network.get_local_height()
+        return remaining > self._v1_blocks_needed(invoice)
+
     async def pay_invoice(self, key):
         self.logger.info(f'trying to pay invoice {key}')
         self.invoices_to_pay[key] = 1000000000000 # lock
         try:
             invoice = self.wallet.get_invoice(key)
+            # v1 forward swap: never pay, and never retry, unless the lockup is confirmed,
+            # unspent, and the on-chain window still covers this invoice's min_final_cltv
+            swap = self._swaps.get(key)
+            if swap is not None and swap.is_reverse and swap.preimage is None:
+                if not self._v1_may_pay(swap, invoice):
+                    self.logger.info(f'not paying v1 swap {key}: lockup not claimable for long enough')
+                    self.invoices_to_pay.pop(key, None)
+                    return
             success, log = await self.lnworker.pay_invoice(invoice)
         except Exception as e:
             self.logger.info(f'exception paying {key}, will not retry')
             self.invoices_to_pay.pop(key, None)
             return
         if not success:
+            swap = self._swaps.get(key)
+            invoice = self.wallet.get_invoice(key)
+            if swap is not None and swap.is_reverse and not self._v1_may_pay(swap, invoice):
+                self.logger.info(f'v1 payment failed and window is gone, not retrying {key}')
+                self.invoices_to_pay.pop(key, None)
+                return
             self.logger.info(f'failed to pay {key}, will retry in 10 minutes')
             self.invoices_to_pay[key] = now() + 600
         else:
@@ -668,10 +698,10 @@ class SwapManager(Logger):
                 if funding_height.conf <= 0:
                     return
                 key = swap.payment_hash.hex()
-                if remaining_time <= MIN_LOCKTIME_DELTA:
+                invoice = self.wallet.get_invoice(key)
+                if not self._v1_may_pay(swap, invoice):
                     if key in self.invoices_to_pay:
-                        # fixme: should consider cltv of ln payment
-                        self.logger.info(f'locktime too close {key} {remaining_time}')
+                        self.logger.info(f'locktime too close for v1 invoice cltv {key} {remaining_time}')
                         self.invoices_to_pay.pop(key, None)
                     return
                 if key not in self.invoices_to_pay:
@@ -679,10 +709,6 @@ class SwapManager(Logger):
                 return
 
             assert swap.preimage, f"reverse swap missing preimage? {swap.payment_hash.hex()=}"
-            # if we revealed the preimage before we must continue trying to claim
-            if remaining_time <= MIN_LOCKTIME_DELTA_FOR_CLAIM and public_preimage is None:
-                self.logger.warning(f'not claiming reverse swap {swap.payment_hash.hex()}, locktime too close: {remaining_time=}')
-                return
             if self.network.config.TEST_SWAPSERVER_REFUND:
                 # for testing: do not create claim tx
                 return
@@ -1811,7 +1837,10 @@ class SwapManager(Logger):
             their_invoice = request['invoice']
             refund_pubkey = bytes.fromhex(request['refundPublicKey'])
             assert len(refund_pubkey) == 33
-            self.lnworker._check_bolt11_invoice(their_invoice, max_min_final_cltv_delta=MAX_MIN_FINAL_CLTV_DELTA)
+
+            # on-chain refund is LOCKTIME_DELTA_REFUND blocks away; the invoice must fit inside it
+            max_cltv = LOCKTIME_DELTA_REFUND - MIN_LOCKTIME_DELTA_FOR_CLAIM - 2
+            self.lnworker._check_bolt11_invoice(their_invoice, max_min_final_cltv_delta=max_cltv)
 
             swap = await self.create_reverse_swap_v1(
                 invoice=their_invoice,
