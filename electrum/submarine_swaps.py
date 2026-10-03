@@ -486,11 +486,26 @@ class SwapManager(Logger):
         self.config.SWAPSERVER_ANN_POW_NONCE = nonce
 
     def _v1_blocks_needed(self, invoice) -> int:
+        """Blocks a v1 forward swap must still have left before we may pay the client's invoice.
+
+        The client created the invoice, so they already know the preimage. The server learns it only
+        the Lightning payment settles. Until then the client can withhold it for at least the
+        invoice's min_final_cltv_expiry_delta. After it arrives the server still needs time to broadcast
+        and confirm our claim, before their on-chain refund at swap.locktime.
+        """
         # blocks the recipient can withhold the preimage, plus blocks we need to land a claim
         min_final = invoice.get_min_final_cltv_delta() if invoice is not None else MIN_FINAL_CLTV_DELTA_FOR_CLIENT
         return min_final + MIN_LOCKTIME_DELTA_FOR_CLAIM + 2
 
     def _v1_may_pay(self, swap: SwapData, invoice) -> bool:
+        """True only if paying this v1 invoice cannot be waited out by a refund.
+
+        A client-forward v1 swap is stored with is_reverse=True. Paying is safe only when
+        all of the following hold:
+        - this is that v1 swap, it was not cancelled, and we do not already have the preimage
+        - the lockup tx is known and has at least one confirmation (an unconfirmed lockup can be RBFed away after we pay)
+        - blocks left until swap.locktime are strictly greater than _v1_blocks_needed()
+        """
         if swap is None or not swap.is_reverse or swap.preimage is not None or swap._is_cancelled:
             return False
         if not swap.funding_txid:
@@ -506,6 +521,8 @@ class SwapManager(Logger):
         self.invoices_to_pay[key] = 1000000000000 # lock
         try:
             invoice = self.wallet.get_invoice(key)
+            # the swap server may try to pay LN invoice but if it fails, it is retried in 10 minutes intervals
+            # the problem with that is that if the lockup of a swap is spend, we still retry, but we should abort
             # v1 forward swap: never pay, and never retry, unless the lockup is confirmed,
             # unspent, and the on-chain window still covers this invoice's min_final_cltv
             swap = self._swaps.get(key)
@@ -1838,7 +1855,8 @@ class SwapManager(Logger):
             refund_pubkey = bytes.fromhex(request['refundPublicKey'])
             assert len(refund_pubkey) == 33
 
-            # on-chain refund is LOCKTIME_DELTA_REFUND blocks away; the invoice must fit inside it
+            # Lockup refund is LOCKTIME_DELTA_REFUND blocks after creation. Reject an invoice the
+            # client can hold longer than that, minus the blocks we need to claim.
             max_cltv = LOCKTIME_DELTA_REFUND - MIN_LOCKTIME_DELTA_FOR_CLAIM - 2
             self.lnworker._check_bolt11_invoice(their_invoice, max_min_final_cltv_delta=max_cltv)
 
