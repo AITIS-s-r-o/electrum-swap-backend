@@ -258,6 +258,7 @@ class SwapData(StoredObject):
     _payment_hash = None
     _payment_pending = False # for forward swaps
     _is_cancelled = False  # forward swaps: funding must not be broadcast
+    _is_forward_v1 = False  # old client-forward flow; restored from the script after restart
 
     @property
     def payment_hash(self) -> bytes:
@@ -311,6 +312,7 @@ class SwapManager(Logger):
         for payment_hash_hex, swap in swaps.items():
             payment_hash = bytes.fromhex(payment_hash_hex)
             swap._payment_hash = payment_hash
+            swap._is_forward_v1 = swap.is_reverse and swap.redeem_script[:1] == bytes([opcodes.OP_HASH160])
             self._reindex_swap(swap.payment_hash, swap)
             if swap.prepay_hash is not None:
                 self._prepayments[swap.prepay_hash] = payment_hash
@@ -494,8 +496,11 @@ class SwapManager(Logger):
         and confirm our claim, before their on-chain refund at swap.locktime.
         """
         # blocks the recipient can withhold the preimage, plus blocks we need to land a claim
-        min_final = invoice.get_min_final_cltv_delta() if invoice is not None else MIN_FINAL_CLTV_DELTA_FOR_CLIENT
-        return min_final + MIN_LOCKTIME_DELTA_FOR_CLAIM + 2
+        if invoice is not None and hasattr(invoice, 'get_min_final_cltv_delta'):
+            min_final = invoice.get_min_final_cltv_delta()
+        else:
+            min_final = LOCKTIME_DELTA_REFUND - MIN_LOCKTIME_DELTA_FOR_CLAIM - 2
+        return min_final + MIN_LOCKTIME_DELTA_FOR_CLAIM + 2+ 2
 
     def _v1_may_pay(self, swap: SwapData, invoice) -> bool:
         """True only if paying this v1 invoice cannot be waited out by a refund.
@@ -506,7 +511,7 @@ class SwapManager(Logger):
         - the lockup tx is known and has at least one confirmation (an unconfirmed lockup can be RBFed away after we pay)
         - blocks left until swap.locktime are strictly greater than _v1_blocks_needed()
         """
-        if swap is None or not swap.is_reverse or swap.preimage is not None or swap._is_cancelled:
+        if swap is None or not swap._is_forward_v1 or swap.preimage is not None or swap._is_cancelled:
             return False
         if not swap.funding_txid:
             return False
@@ -526,7 +531,7 @@ class SwapManager(Logger):
             # v1 forward swap: never pay, and never retry, unless the lockup is confirmed,
             # unspent, and the on-chain window still covers this invoice's min_final_cltv
             swap = self._swaps.get(key)
-            if swap is not None and swap.is_reverse and swap.preimage is None:
+            if swap is not None and swap._is_forward_v1 and swap.preimage is None:
                 if not self._v1_may_pay(swap, invoice):
                     self.logger.info(f'not paying v1 swap {key}: lockup not claimable for long enough')
                     self.invoices_to_pay.pop(key, None)
@@ -539,7 +544,7 @@ class SwapManager(Logger):
         if not success:
             swap = self._swaps.get(key)
             invoice = self.wallet.get_invoice(key)
-            if swap is not None and swap.is_reverse and not self._v1_may_pay(swap, invoice):
+            if swap is not None and swap._is_forward_v1 and not self._v1_may_pay(swap, invoice):
                 self.logger.info(f'v1 payment failed and window is gone, not retrying {key}')
                 self.invoices_to_pay.pop(key, None)
                 return
@@ -707,6 +712,7 @@ class SwapManager(Logger):
                 return
         else:
             # Forward V1 flow preserves the code removed in https://github.com/spesmilo/electrum/commit/5af2bb7e97e53bab1785eee8861bffcfdc3cd3a5.
+            # Forward v1 is stored as a reverse swap, but its preimage comes from paying the client invoice. A v2 reverse swap still holds a secret preimage.
             if swap.preimage is None:
                 swap.preimage = self.lnworker.get_preimage(swap.payment_hash)
 
@@ -715,6 +721,8 @@ class SwapManager(Logger):
                 if funding_height.conf <= 0:
                     return
                 key = swap.payment_hash.hex()
+                if not swap._is_forward_v1:
+                    return
                 invoice = self.wallet.get_invoice(key)
                 if not self._v1_may_pay(swap, invoice):
                     if key in self.invoices_to_pay:
@@ -726,6 +734,11 @@ class SwapManager(Logger):
                 return
 
             assert swap.preimage, f"reverse swap missing preimage? {swap.payment_hash.hex()=}"
+            # v2: do not publish the preimage into a refund race.
+            # Forward v1: the preimage is already public, so claim while the lockup is unspent.
+            if not swap._is_forward_v1 and remaining_time <= MIN_LOCKTIME_DELTA_FOR_CLAIM and public_preimage is None:
+                self.logger.warning(f'not claiming reverse swap {swap.payment_hash.hex()}, locktime too close: {remaining_time=}')
+                return
             if self.network.config.TEST_SWAPSERVER_REFUND:
                 # for testing: do not create claim tx
                 return
@@ -1141,6 +1154,7 @@ class SwapManager(Logger):
             funding_txid=None,
             spending_txid=None,
         )
+        swap._is_forward_v1 = True
         self._add_swap(payment_hash, swap)
         self.add_lnwatcher_callback(swap)
         return swap
