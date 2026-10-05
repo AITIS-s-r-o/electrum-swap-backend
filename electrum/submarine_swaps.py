@@ -258,6 +258,7 @@ class SwapData(StoredObject):
     _payment_hash = None
     _payment_pending = False # for forward swaps
     _is_cancelled = False  # forward swaps: funding must not be broadcast
+    _is_forward_v1 = False  # old client-forward flow; restored from the script after restart
 
     @property
     def payment_hash(self) -> bytes:
@@ -311,6 +312,7 @@ class SwapManager(Logger):
         for payment_hash_hex, swap in swaps.items():
             payment_hash = bytes.fromhex(payment_hash_hex)
             swap._payment_hash = payment_hash
+            swap._is_forward_v1 = swap.is_reverse and swap.redeem_script[:1] == bytes([opcodes.OP_HASH160])
             self._reindex_swap(swap.payment_hash, swap)
             if swap.prepay_hash is not None:
                 self._prepayments[swap.prepay_hash] = payment_hash
@@ -485,17 +487,67 @@ class SwapManager(Logger):
         self.logger.debug(f"Found {pow_amount} bits of work for Nostr announcement.")
         self.config.SWAPSERVER_ANN_POW_NONCE = nonce
 
+    def _v1_blocks_needed(self, invoice) -> int:
+        """Blocks a v1 forward swap must still have left before we may pay the client's invoice.
+
+        The client created the invoice, so they already know the preimage. The server learns it only
+        the Lightning payment settles. Until then the client can withhold it for at least the
+        invoice's min_final_cltv_expiry_delta. After it arrives the server still needs time to broadcast
+        and confirm our claim, before their on-chain refund at swap.locktime.
+        """
+        # blocks the recipient can withhold the preimage, plus blocks we need to land a claim
+        if invoice is not None and hasattr(invoice, 'get_min_final_cltv_delta'):
+            min_final = invoice.get_min_final_cltv_delta()
+        else:
+            min_final = LOCKTIME_DELTA_REFUND - MIN_LOCKTIME_DELTA_FOR_CLAIM - 2
+        return min_final + MIN_LOCKTIME_DELTA_FOR_CLAIM + 2+ 2
+
+    def _v1_may_pay(self, swap: SwapData, invoice) -> bool:
+        """True only if paying this v1 invoice cannot be waited out by a refund.
+
+        A client-forward v1 swap is stored with is_reverse=True. Paying is safe only when
+        all of the following hold:
+        - this is that v1 swap, it was not cancelled, and we do not already have the preimage
+        - the lockup tx is known and has at least one confirmation (an unconfirmed lockup can be RBFed away after we pay)
+        - blocks left until swap.locktime are strictly greater than _v1_blocks_needed()
+        """
+        if swap is None or not swap._is_forward_v1 or swap.preimage is not None or swap._is_cancelled:
+            return False
+        if not swap.funding_txid:
+            return False
+        height = self.lnwatcher.adb.get_tx_height(swap.funding_txid)
+        if height.conf <= 0:
+            return False
+        remaining = swap.locktime - self.network.get_local_height()
+        return remaining > self._v1_blocks_needed(invoice)
+
     async def pay_invoice(self, key):
         self.logger.info(f'trying to pay invoice {key}')
         self.invoices_to_pay[key] = 1000000000000 # lock
         try:
             invoice = self.wallet.get_invoice(key)
+            # the swap server may try to pay LN invoice but if it fails, it is retried in 10 minutes intervals
+            # the problem with that is that if the lockup of a swap is spend, we still retry, but we should abort
+            # v1 forward swap: never pay, and never retry, unless the lockup is confirmed,
+            # unspent, and the on-chain window still covers this invoice's min_final_cltv
+            swap = self._swaps.get(key)
+            if swap is not None and swap._is_forward_v1 and swap.preimage is None:
+                if not self._v1_may_pay(swap, invoice):
+                    self.logger.info(f'not paying v1 swap {key}: lockup not claimable for long enough')
+                    self.invoices_to_pay.pop(key, None)
+                    return
             success, log = await self.lnworker.pay_invoice(invoice)
         except Exception as e:
             self.logger.info(f'exception paying {key}, will not retry')
             self.invoices_to_pay.pop(key, None)
             return
         if not success:
+            swap = self._swaps.get(key)
+            invoice = self.wallet.get_invoice(key)
+            if swap is not None and swap._is_forward_v1 and not self._v1_may_pay(swap, invoice):
+                self.logger.info(f'v1 payment failed and window is gone, not retrying {key}')
+                self.invoices_to_pay.pop(key, None)
+                return
             self.logger.info(f'failed to pay {key}, will retry in 10 minutes')
             self.invoices_to_pay[key] = now() + 600
         else:
@@ -660,6 +712,7 @@ class SwapManager(Logger):
                 return
         else:
             # Forward V1 flow preserves the code removed in https://github.com/spesmilo/electrum/commit/5af2bb7e97e53bab1785eee8861bffcfdc3cd3a5.
+            # Forward v1 is stored as a reverse swap, but its preimage comes from paying the client invoice. A v2 reverse swap still holds a secret preimage.
             if swap.preimage is None:
                 swap.preimage = self.lnworker.get_preimage(swap.payment_hash)
 
@@ -668,10 +721,12 @@ class SwapManager(Logger):
                 if funding_height.conf <= 0:
                     return
                 key = swap.payment_hash.hex()
-                if remaining_time <= MIN_LOCKTIME_DELTA:
+                if not swap._is_forward_v1:
+                    return
+                invoice = self.wallet.get_invoice(key)
+                if not self._v1_may_pay(swap, invoice):
                     if key in self.invoices_to_pay:
-                        # fixme: should consider cltv of ln payment
-                        self.logger.info(f'locktime too close {key} {remaining_time}')
+                        self.logger.info(f'locktime too close for v1 invoice cltv {key} {remaining_time}')
                         self.invoices_to_pay.pop(key, None)
                     return
                 if key not in self.invoices_to_pay:
@@ -679,8 +734,9 @@ class SwapManager(Logger):
                 return
 
             assert swap.preimage, f"reverse swap missing preimage? {swap.payment_hash.hex()=}"
-            # if we revealed the preimage before we must continue trying to claim
-            if remaining_time <= MIN_LOCKTIME_DELTA_FOR_CLAIM and public_preimage is None:
+            # v2: do not publish the preimage into a refund race.
+            # Forward v1: the preimage is already public, so claim while the lockup is unspent.
+            if not swap._is_forward_v1 and remaining_time <= MIN_LOCKTIME_DELTA_FOR_CLAIM and public_preimage is None:
                 self.logger.warning(f'not claiming reverse swap {swap.payment_hash.hex()}, locktime too close: {remaining_time=}')
                 return
             if self.network.config.TEST_SWAPSERVER_REFUND:
@@ -1098,6 +1154,7 @@ class SwapManager(Logger):
             funding_txid=None,
             spending_txid=None,
         )
+        swap._is_forward_v1 = True
         self._add_swap(payment_hash, swap)
         self.add_lnwatcher_callback(swap)
         return swap
@@ -1811,7 +1868,11 @@ class SwapManager(Logger):
             their_invoice = request['invoice']
             refund_pubkey = bytes.fromhex(request['refundPublicKey'])
             assert len(refund_pubkey) == 33
-            self.lnworker._check_bolt11_invoice(their_invoice, max_min_final_cltv_delta=MAX_MIN_FINAL_CLTV_DELTA)
+
+            # Lockup refund is LOCKTIME_DELTA_REFUND blocks after creation. Reject an invoice the
+            # client can hold longer than that, minus the blocks we need to claim.
+            max_cltv = LOCKTIME_DELTA_REFUND - MIN_LOCKTIME_DELTA_FOR_CLAIM - 2
+            self.lnworker._check_bolt11_invoice(their_invoice, max_min_final_cltv_delta=max_cltv)
 
             swap = await self.create_reverse_swap_v1(
                 invoice=their_invoice,
